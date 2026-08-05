@@ -1,22 +1,42 @@
-# ROS2
+# ROS2 기술 레퍼런스
 
-- ROS2 패키지 생성 <br>
-  빌드는 워크스페이스에서 <br>
-  패키지생성은 소스안에서 <br>
-  생성한 패키지를 불러오기위해선 빌드된 bash를 source해야함
+안동(CARO-Brain), sci논문(과수원 zero-shot 자율주행), 디지털트윈(dt-phenotyping) 세
+프로젝트가 공유하는 ROS2 관련 기술을 기술별로 정리하는 지식 베이스.
 
+## 공개 범위 원칙
 
-- 코드를 바꿀때마다 빌드를 해줘야한다. >> 패키지만들때도 마찬가지 >> bash도 다시 불러와야함
-  - 사실 symlink를 사용하면 bash는 다시 안불러도 되는데 그건 나~~~중에  
+이 레포는 public이다. 아래 기준을 항상 따른다.
 
----
+- **담는 것**: 장비 스펙/데이터시트, 개념 설명, 실행 명령어, 아키텍처(다이어그램), 통신
+  프로토콜 정의, 공식 발표/게재된 내용
+- **담지 않는 것**: 실제 소스코드(스니펫 포함), 안동 컨소시엄 미확정 협의 내용, sci논문
+  미게재 실험 데이터·예비 결과
+- 프로젝트 적용 예시는 "어떤 파라미터로 썼는지"까지만 적고, 그 이상의 프로젝트 고유
+  의사결정 배경은 각 프로젝트 devlog로 링크만 건다 (코드가 필요해지면 이 레포와 별도로
+  코드 전용 레포를 새로 판다)
 
-- setup.bash: 이 스크립트는 현재 터미널 세션뿐만 아니라, 향후에 열릴 모든 터미널 세션에서 ROS 2 환경을 설정합니다. <br> 즉, 현재 환경에서만 아니라 시스템 전체에 영향을 미칩니다.
-  
-- local_setup.bash: 이 스크립트는 현재 터미널 세션에만 영향을 미칩니다. <br> 다른 터미널에서 ROS 2를 사용하려면 해당 터미널에서도 이 스크립트를 실행해야 합니다.
+## 구조
 
----
+- [`hardware/`](hardware/README.md) — 물리 장비(센서, 구동부, 로봇암, 연산 하드웨어)
+- [`software/`](software/README.md) — 소프트웨어 계층(센서퓨전, 통신 프로토콜, 자율주행
+  로직, 앱/모델, ROS2 기초)
+- [`tracking/`](tracking/README.md) — 이 지식을 이용한 실제 기술 검증·테스트 진행상황
+  (목표/이슈/상태 기록)
+- [`templates/`](templates/) — 새 하드웨어/소프트웨어 문서 작성 시 복사해서 쓰는 템플릿
 
-- ROS2에서는 C++로 작성된 패키지에는 ament_cmake를 사용하고, Python으로 작성된 패키지에는 ament_python을 사용하는 것이 관례입니다.
-  
-- 메세지 빌드기능이 'ament_python' 엔 없다. 그래서 메세지 만들 때 'ament_cmake'를 사용
+## 프로젝트 태그 범례
+
+문서의 "적용 프로젝트" 섹션에서 아래 이름을 사용한다.
+
+| 태그 | 프로젝트 | devlog |
+|---|---|---|
+| 안동 | CARO-Brain (쓰레기로봇 RaaS) | `Gorani-ros2/caro-brain-devlog` (private) |
+| sci논문 | 과수원 zero-shot 자율주행 논문 | `Gorani-ros2/sci_second` (private) |
+| 디지털트윈 | dt-phenotyping | `Gorani-ros2/dt-phenotyping-devlog` (private) |
+
+## 새 문서 추가하는 법
+
+- 새 장비 모델을 문서화할 때: `templates/hardware-doc-template.md`를 해당 카테고리
+  폴더로 복사 → 파일명을 `제조사-모델명.md`로 변경 → 내용 채움
+- 새 소프트웨어 주제를 문서화할 때: `templates/software-doc-template.md`를 해당
+  카테고리 폴더로 복사 → 파일명을 `주제-kebab-case.md`로 변경 → 내용 채움
