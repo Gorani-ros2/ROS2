@@ -7,4 +7,4 @@
 ## 이 폴더의 문서
 
 이 카테고리의 개별 장비 모델 문서는 `templates/hardware-doc-template.md`를 복사해서
-`제조사-모델명.md` 형식으로 이 폴더에 추가한다.
+`제조사-모델명-kebab-case.md` 형식으로 이 폴더에 추가한다.

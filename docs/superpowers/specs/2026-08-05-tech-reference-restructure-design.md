@@ -18,9 +18,9 @@ devlog 컨벤션(reference/journal/planning/reviews/correspondence/issues)을 �
 
 ## 공개 범위 원칙 (Public 레포 안전장치)
 
-레포는 public으로 유지한다. 안동(정부 R&D 컨소시엄 과제, 미확정 협의사항 존재)과
-sci논문(미게재 논문, 예비 결과 노출 시 novelty 리스크)은 각각 별도의 리스크가 있어,
-다음 원칙을 루트 README.md에 명문화하여 매번 판단하지 않고 이 기준을 따른다.
+레포는 public으로 유지한다. 안동(정부 R&D 컨소시엄 과제)과 sci논문(학술 논문 프로젝트)은
+각각 별도의 공개 리스크가 있어, 다음 원칙을 루트 README.md에 명문화하여 매번 판단하지 않고
+이 기준을 따른다.
 
 - **담는 것**: 장비 스펙/데이터시트, 개념 설명, 실행 명령어, 아키텍처(다이어그램), 통신
   프로토콜 정의, 공식 발표/게재된 내용
@@ -29,8 +29,7 @@ sci논문(미게재 논문, 예비 결과 노출 시 novelty 리스크)은 각�
   데이터·예비 결과
 - 프로젝트 적용 예시는 "어떤 파라미터로 썼는지"까지만 적고, 그 이상의 프로젝트 고유
   의사결정 배경은 각 프로젝트 devlog로 링크만 걸고 내용을 복제하지 않는다
-  ([[reference_andong_wastebot_devlog]], [[reference_sci_second_paper]],
-  [[reference_dt_phenotyping_devlog]])
+  (caro-brain-devlog, sci_second, dt-phenotyping-devlog — 모두 private)
 
 ## 폴더 구조
 
@@ -119,8 +118,8 @@ ROS2/
 - `goal/README.md`, `issues/README.md`: 각각 살아있는 단일 표로 관리
   (목표|상태|관련 카테고리 / 이슈|발견일|상태|관련 문서 링크)
 - `status/`: 날짜별 개별 파일. 기존 저장소(안동, dt-phenotyping)와 동일한 컨벤션 재사용 —
-  두괄식 구조(맨 위 스토리라인 요약 먼저, [[feedback_journal_lead_with_summary]]), 벤치마크/
-  검증 결과와 씽크빅 사항은 강조 표시, 전문가 검토도 이 폴더에 포함
+  두괄식 구조(맨 위 스토리라인 요약 먼저), 벤치마크/검증 결과와 씽크빅 사항은 강조 표시,
+  전문가 검토도 이 폴더에 포함
 - tracking이 추적하는 대상은 **이 지식을 이용한 실제 기술 검증·테스트 진행상황**이다
   (문서화 진행상황이 아니라, 예: "lidar-camera 캘리브레이션 정확도 검증" 같은 실제 검증
   작업의 목표/이슈/결과)

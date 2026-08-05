@@ -23,6 +23,7 @@
 - [`tracking/`](tracking/README.md) — 이 지식을 이용한 실제 기술 검증·테스트 진행상황
   (목표/이슈/상태 기록)
 - [`templates/`](templates/) — 새 하드웨어/소프트웨어 문서 작성 시 복사해서 쓰는 템플릿
+- [`docs/`](docs/) — 이 레포 구조의 설계 spec과 실행 plan
 
 ## 프로젝트 태그 범례
 
@@ -37,6 +38,6 @@
 ## 새 문서 추가하는 법
 
 - 새 장비 모델을 문서화할 때: `templates/hardware-doc-template.md`를 해당 카테고리
-  폴더로 복사 → 파일명을 `제조사-모델명.md`로 변경 → 내용 채움
+  폴더로 복사 → 파일명을 `제조사-모델명-kebab-case.md`로 변경 → 내용 채움
 - 새 소프트웨어 주제를 문서화할 때: `templates/software-doc-template.md`를 해당
   카테고리 폴더로 복사 → 파일명을 `주제-kebab-case.md`로 변경 → 내용 채움
