@@ -2,7 +2,7 @@
 
 ## 개념
 
-(작성 예정 — 이 기술을 실제로 다루는 프로젝트가 생기면 채운다)
+Ouster 등 3D/2D 라이다 센서의 회전 스캔 제어, 수평 해상도(Columns) 및 빔 채널 매개변수 설정, Ethernet UDP/TCP 데이터 수신, HTTP Telemetry 센서 상태 쿼리 및 ROS 2 Topic/QoS(`Best Effort`) 제어 기술을 다룹니다.
 
 ## 이 폴더의 문서
 

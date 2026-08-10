@@ -2,14 +2,14 @@
 
 ## 개요
 
-(작성 예정 — 이 기술을 실제로 다루는 프로젝트가 생기면 채운다. 새 세부 문서를 추가할 때는
-`templates/software-doc-template.md`를 복사해서 `주제-kebab-case.md`로 이 폴더에
-추가한다.)
+3D 라이다, 파노라마 카메라, IMU, GPS 등 이종 센서 간의 시스템 타임스탬프 기반 시간 동기화(`TIME_FROM_ROS_TIME`), 센서 데이터 동시 수집 파이프라인, 공간 캘리브레이션 및 점군-이미지 퓨전 기술을 다룹니다.
 
 ## 관련 하드웨어
 
-## 아키텍처 / 데이터 흐름
+- [`hardware/vision_sensors/lidar/`](../../hardware/vision_sensors/lidar/README.md)
+- [`hardware/vision_sensors/camera/`](../../hardware/vision_sensors/camera/README.md)
 
-## 설정 방법
+## 이 폴더의 문서
 
-## 사용 예시 / 명령어
+이 카테고리의 개별 소프트웨어 주제 문서는 `templates/software-doc-template.md`를 복사해서
+`주제-kebab-case.md` 형식으로 이 폴더에 추가한다.
