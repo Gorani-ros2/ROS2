@@ -18,10 +18,46 @@ Ouster OS0-128은 128채널의 초광각(Super-Wide FOV) 3D 라이다 센서로,
   - `/ouster/imu` (`sensor_msgs/msg/Imu`)
   - `/ouster/lidar_packets` (`ouster_sensor_msgs/msg/PacketMsg`)
 
+## 제어 방법 및 실행 명령어 (Control Methods & Commands)
+
+### 1. ROS 2 Ouster 드라이버 실행
+```bash
+source /opt/ros/humble/setup.bash
+source ~/workspaces/insta360/ouster_ros2/install/setup.bash
+
+# Ouster 드라이버 런칭 (my_ouster_params.yaml 설정 적용)
+ros2 launch ouster_ros driver.launch.py params_file:=my_ouster_params.yaml viz:=False
+```
+
+### 2. 센서 메타데이터 JSON 쿼리 및 저장
+```bash
+# ROS 2 서비스 콜을 통한 캘리브레이션/메타데이터 획득
+ros2 service call /ouster/get_metadata ouster_sensor_msgs/srv/GetMetadata
+```
+
+### 3. 포인트클라우드 발행 주기 쓰로틀링 (Hz 제한)
+```bash
+# 10Hz 본래 주기를 5Hz로 스로틀하여 PC CPU 수신 부하 감소
+ros2 run topic_tools throttle messages /ouster/points 5 /ouster/points_throttled
+```
+
+### 4. Raw Ethernet UDP 패킷 Capture (tcpdump PCAP)
+```bash
+# 라이다 원천 통신 데이터 덤프 (백업 및 재생용)
+sudo tcpdump -i <ethernet_interface> 'host <sensor_ip> and udp' -w ouster.pcap
+```
+
+### 5. 센서 실시간 온도 및 상태 조회 (HTTP Telemetry)
+```bash
+# 센서 내부 온도 및 thermal_status 조회
+curl -s http://169.254.129.201/api/v1/sensor/telemetry | jq .
+```
+
 ## RViz2 시각화 필수 설정
 1. **Global Options > Fixed Frame**: `os_sensor` 또는 `os_lidar`
 2. **PointCloud2 > Topic**: `/ouster/points`
 3. **PointCloud2 > Topic > Reliability Policy**: **`Best Effort`** (SensorData QoS 호환에 필수)
+
 
 ---
 

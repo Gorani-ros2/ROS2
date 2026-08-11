@@ -4,6 +4,10 @@
 
 Insta360 등 360도 파노라마 카메라, 뎁스 카메라, 서라운드 뷰, 스트리밍 카메라 제어 기술 카테고리입니다. USB/Ethernet 통신 프로토콜, SDK 제어 API, 해상도 및 프레임레이트 매개변수 설정 기술을 다룹니다.
 
+## 문서 목록
+
+- [Insta360 파노라마 카메라 (Camera SDK)](insta360-camera-sdk.md) — 360도 Dual Fisheye 카메라 제어, C++/Python SDK API, 비디오/사진 제어, 과열 관리 사양 및 ROS 2 활용법
+
 ## 하위 카테고리
 
 - [`depth_camera/`](depth_camera/README.md)
@@ -14,3 +18,4 @@ Insta360 등 360도 파노라마 카메라, 뎁스 카메라, 서라운드 뷰, 
 
 이 카테고리의 개별 장비 모델 문서는 `templates/hardware-doc-template.md`를 복사해서
 `제조사-모델명-kebab-case.md` 형식으로 이 폴더에 추가한다.
+
