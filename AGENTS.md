@@ -1,4 +1,4 @@
-# 🤖 AGENTS.md — AI Agent Collaboration & Operating Guidelines
+# 🤖 AGENTS.md — AI Agent Collaboration & Document Standardization Protocol
 
 Welcome AI Agent! You are working on the **ROS 2 & Multi-Sensor System Knowledge Base** repository (`Gorani-ros2/ROS2`).
 
@@ -10,22 +10,42 @@ This repository is actively managed across multiple development machines (`knu l
 
 When assisting the user or making edits to this repository, you MUST strictly adhere to the following rules:
 
-### 1. 📖 Comprehensive & Rich Technical Detail Requirement
-- **NEVER summarize briefly** or skip technical explanations.
-- When the user asks questions or resolves hardware/software issues, write out the complete, rich technical background, error root causes, parameters, formulas, commands, and firmware upgrade procedures in detail.
+### 1. 📐 Standardized Document Structure & Writing Order
+- All new and updated documentation MUST use the templates in `templates/` and follow a strict, unified section hierarchy:
+  - **Hardware Docs (`templates/hardware-doc-template.md`)**:
+    1. Title `# [제조사] [모델명] [장비 카테고리]`
+    2. `## 1. 개요 및 주요 특징`
+    3. `## 2. 하드웨어 기술 사양 (표)`
+    4. `## 3. 핀맵 및 커넥터 가이드`
+    5. `## 4. 물리적 설치 및 배치 3대 수칙`
+    6. `## 5. ROS 2 드라이버 및 토픽 연동`
+    7. `## 6. ❓ 자주 묻는 질문 및 실전 기술 Q&A`
+    8. `## 7. 펌웨어 및 변경 이력`
+  - **Software Docs (`templates/software-doc-template.md`)**:
+    1. Title `# [소프트웨어/모듈명] [주제 및 기능 정의]`
+    2. `## 1. 개요 및 파이프라인 (Mermaid 흐름도)`
+    3. `## 2. 필수 환경 및 패키지 의존성`
+    4. `## 3. 소스코드 및 구동 가이드`
+    5. `## 4. 발행 및 구독 토픽 정의 (표)`
+    6. `## 5. ❓ 개발/테스트 Q&A 및 트러블슈팅`
+    7. `## 6. 발열 및 안전 관리 수칙`
 
-### 2. 📁 Multi-Location Categorization (`hardware/` & `software/`)
+### 2. 📖 Comprehensive & Rich Technical Detail Requirement
+- **NEVER summarize briefly** or skip technical explanations.
+- When the user asks questions or resolves hardware/software issues, write out the complete, rich technical background, error root causes, parameters, formulas, commands, and firmware upgrade procedures in detail inside the Q&A section of the document.
+
+### 3. 📁 Multi-Location Categorization (`hardware/` & `software/`)
 - Place hardware specs, pinouts, power calculations, antenna guidelines in `hardware/`.
 - Place ROS 2 drivers, topics, parsing nodes, thermal safety, and synchronization architecture in `software/`.
 - **Duplication is explicitly allowed and required**: If information touches both hardware and software, record the detailed Q&A and documentation in **all relevant places** without omission.
 
-### 3. 📢 Mandatory Root `README.md` Update
+### 4. 📢 Mandatory Root `README.md` Update
 - Every session that modifies documentation, code, or hardware configuration MUST update the **`📢 최근 핵심 업데이트 내역 (Latest Updates)`** section in the root [`README.md`](README.md).
-- Always include: Date, Host Machine (`knu laptop` vs `knu desktop`), summary of changes, and clickable file links.
+- Always include: Date, Host Machine (`knu laptop` vs `knu desktop`), local source folder path, summary of changes, and clickable file links.
 
-### 4. 💻 Environment Audit Logging
+### 5. 💻 Environment Audit Logging
 - Every session MUST create or update a tracking log under `tracking/YYYY-MM-DD-environment-audit.md`.
 - State the machine identifier (`knu laptop`), OS, AI model identity, local raw resource paths (e.g. `/home/knu/workspaces/sensors/sub_sensors`), and affected file list.
 
-### 5. 🔄 Seamless Continuation Protocol for Next AI / Session
+### 6. 🔄 Seamless Continuation Protocol for Next AI / Session
 - Always record current completion status and upcoming tasks (e.g. Teltonika RUT241 LTE Router NTRIP Client B-mode, Ouster LiDAR PPS time sync) in the docs and tracking files so that **any other AI on another computer can `git pull` and immediately pick up where you left off**.
