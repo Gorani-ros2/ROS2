@@ -1,8 +1,23 @@
 # Tallysman Accutenna® TW7972 3중 대역 GNSS 안테나
 
+> **작성 일자**: 2026-08-11  
+> **작성 장비**: `knu laptop` (KNU 노트북 PC)  
+> **작성 AI**: Antigravity (Google DeepMind Team)  
+> **파일명 규격**: `tallysman-tw7972-antenna.md`
+
+---
+
+## 📌 Executive Abstract (상세 요약 및 초록)
+본 문서는 Tallysman Accutenna® TW7972 3중 대역 멀티-GNSS 고정밀 안테나의 기술 사양, LNA 32dB 이득 수치, 물리적 Ground Plane 배치 수칙, 배/등 방향별 위성 수신 지향성 및 실전 연결 Q&A를 다룹니다.
+
+2026-08-11 진행된 실전 검증에서는 Septentrio mosaic-go G5 수신기의 `MAIN` 포트 직결 체결, 직경 100mm 이상 금속 Ground Plane 부착을 통한 위성 멀티패스 반사파 억제효과, 돔 상단부(등)의 수평 상방 배치 수칙 및 30~50cm 이상 이중 안테나 이격 거리를 정밀하게 검증하여 기록하였습니다.
+
+---
+
 ## 📌 개요 및 정의
 
 Tallysman TW7972는 GPS L1/L2/L5, GLONASS G1/G2/G3, BeiDou B1/B2, Galileo E1/E5a+b 및 L-band 보정 신호를 수신하는 고정밀 3중 대역(Triple Band) Accutenna® 기술 안테나입니다. 
+
 
 셀룰러 700MHz 고출력 신호 간섭 및 상호변조를 방지하며, 정밀 농업, 자율주행 로봇 차량 추적, RTK 베이스/로버 시스템에 적용됩니다.
 

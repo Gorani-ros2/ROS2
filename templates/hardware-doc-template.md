@@ -1,18 +1,27 @@
-# 📑 [제조사] [모델명] [장비 카테고리/타입]
+# 📑 [제조사] [모델명] [테스트주제/장비타입]
+
+> **작성 일자**: YYYY-MM-DD  
+> **작성 장비**: `knu laptop` (또는 `knu desktop`)  
+> **작성 AI**: Antigravity (Google DeepMind Team)  
+> **파일명 규격**: `[제조사/센서명]-[주제/테스트내용].md` (예: `septentrio-mosaic-go-g5-p3h.md`, `septentrio-pps-lidar-sync.md`)
+
+---
+
+## 📌 Executive Abstract (상세 요약 및 초록)
+본 문서는 [제조사/모델명] 센서의 물리적 하드웨어 사양, 인터페이스 핀맵, 설치 3대 수칙, ROS 2 드라이버 구동 테스트 및 실전 Q&A 결과를 다룹니다. 작업량이 많거나 테스트 범위가 넓을 경우 이 초록 섹션을 2~3단락 이상 상세히 작성하여 문서 전체의 핵심 기술 성과를 빠르게 파악할 수 있도록 합니다.
+
+---
 
 ## 1. 개요 및 주요 특징 (Overview & Key Features)
 * **장비 정의**: 장비의 핵심 역할 및 적용 분야 요약
-* **핵심 기능**:
-  * 기능 1: 주요 기능 불릿 설명
-  * 기능 2: 주요 기능 불릿 설명
-* **원문 데이터시트**: `[PDF 원본 파일명](파일명.pdf)` (반드시 문서와 동일한 폴더에 보관)
+* **원문 데이터시트 PDF**: `[PDF 원본 파일명](파일명.pdf)` (반드시 문서와 동일한 폴더에 보관)
 
 ---
 
 ## 2. 🔗 관련 소프트웨어 및 센서 십자 링크 (Cross-Links)
-* **연동 안테나/센서**: `[안테나 문서](tallysman-tw7972-antenna.md)`
-* **연동 ROS 2 파서 노드**: `[ROS 2 NMEA Fix 노드](../../../software/ros2_basics/septentrio_nmea_fix_node.py)`
-* **연동 동기화 모듈**: `[라이다-카메라-GNSS 동기화 녹화](../../../software/sensorfusion/lidar-insta360-sync-record.md)`
+* 📡 **체결 안테나/센서**: `[안테나 문서](tallysman-tw7972-antenna.md)`
+* 💻 **관련 ROS 2 파서 노드**: `[ROS 2 NMEA Fix 노드](../../../software/ros2_basics/septentrio_nmea_fix_node.py)`
+* 📹 **관련 동기화 모듈**: `[라이다-카메라-GNSS 동기화 녹화](../../../software/sensorfusion/lidar-insta360-sync-record.md)`
 
 ---
 

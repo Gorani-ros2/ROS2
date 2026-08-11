@@ -1,8 +1,21 @@
 # 라이다 & Insta360 동시 제어 및 시간 동기화 (LiDAR & Camera Synchronized Controller)
 
-## 개요
+> **작성 일자**: 2026-08-11  
+> **작성 장비**: `knu laptop` (KNU 노트북 PC)  
+> **작성 AI**: Antigravity (Google DeepMind Team)  
+> **파일명 규격**: `lidar-insta360-sync-record.md`
+
+---
+
+## 📌 Executive Abstract (상세 요약 및 초록)
+본 문서는 Ouster OS0-128 3D 라이다, Insta360 360도 카메라, Septentrio RTK 수신기 멀티 센서 융합 시스템의 동시 제어 아키텍처, 파이썬 동기화 녹화 스크립트(`sync_record.py`), ROS 2 오프셋 동기화 및 다중 센서 고온 발열 방지 수칙을 다룹니다.
+
+---
+
+## 1. 개요 및 정의
 
 Ouster OS0-128 3D 라이다와 Insta360 360도 파노라마 카메라의 이종(Heterogeneous) 센서를 통합하여 **시분할/연속 동시 녹화**, **스틸 샷 동시 캡처**, **ROS 2 타임스탬프 동기화**, **원천 PCAP 수집** 및 **시스템 최대 온도 변화 대응 관리**를 수행하는 통합 동시 제어 기술입니다.
+
 
 ---
 

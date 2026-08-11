@@ -1,5 +1,17 @@
 # 💻 [소프트웨어/모듈명] [주제 및 기능 정의]
 
+> **작성 일자**: YYYY-MM-DD  
+> **작성 장비**: `knu laptop` (또는 `knu desktop`)  
+> **작성 AI**: Antigravity (Google DeepMind Team)  
+> **파일명 규격**: `[모듈명]-[주제/테스트내용].md` (예: `septentrio-nmea-fix-node.md`, `lidar-insta360-sync-record.md`)
+
+---
+
+## 📌 Executive Abstract (상세 요약 및 초록)
+본 문서는 [소프트웨어/모듈명]의 시스템 연동 아키텍처, 파이프라인, 소스코드, 구동 방법, ROS 2 토픽 정의 및 트러블슈팅 Q&A 결과를 상세히 기록한 레퍼런스입니다. 구현된 노드 알고리즘과 테스트 결과를 상세하게 기술합니다.
+
+---
+
 ## 1. 개요 및 파이프라인 (Overview & Pipeline)
 * **목적**: 시스템 연동, 동기화, 센서 파싱 노드 기능 정의
 * **시스템 아키텍처 흐름도**:
@@ -12,9 +24,9 @@ flowchart LR
 ---
 
 ## 2. 🔗 관련 하드웨어 장비 문서 십자 링크 (Cross-Links)
-* **연동 GNSS 수신기**: `[Septentrio mosaic-go G5 P3H](../../hardware/support_sensors/gps_rtk/septentrio-mosaic-go-g5-p3h.md)`
-* **연동 안테나**: `[Tallysman TW7972 안테나](../../hardware/support_sensors/gps_rtk/tallysman-tw7972-antenna.md)`
-* **연동 3D 라이다**: `[Ouster OS0-128 라이다](../../hardware/vision_sensors/lidar/ouster-os0-128.md)`
+* 📡 **연동 GNSS 수신기**: `[Septentrio mosaic-go G5 P3H](../../hardware/support_sensors/gps_rtk/septentrio-mosaic-go-g5-p3h.md)`
+* 📡 **연동 안테나**: `[Tallysman TW7972 안테나](../../hardware/support_sensors/gps_rtk/tallysman-tw7972-antenna.md)`
+* 📹 **연동 3D 라이다**: `[Ouster OS0-128 라이다](../../hardware/vision_sensors/lidar/ouster-os0-128.md)`
 
 ---
 

@@ -1,8 +1,25 @@
 # Septentrio mosaic-go G5 P3 / P3H 수신기
 
+> **작성 일자**: 2026-08-11  
+> **작성 장비**: `knu laptop` (KNU 노트북 PC)  
+> **작성 AI**: Antigravity (Google DeepMind Team)  
+> **파일명 규격**: `septentrio-mosaic-go-g5-p3h.md`
+
+---
+
+## 📌 Executive Abstract (상세 요약 및 초록)
+본 문서는 **Septentrio mosaic-go G5 P3/P3H Evaluation Kit** RTK GNSS 수신기의 하드웨어 사양, 인터페이스 핀맵, 펌웨어 업그레이드, ROS 2 연동 및 실전 문답을 망라한 통합 기술 레퍼런스입니다. 
+
+2026-08-11 진행된 실전 검증에서는 구 펌웨어(v1.0.0)에서 발생하던 ROSaic C++ 드라이버(`septentrio_gnss_driver`)의 SBF 명령어 구문 에러를 수신기 플래시 메모리에 최신 공식 펌웨어 **v1.1.0**(`mosaic-G5 P3H-1.1.0.suf`)을 파이썬 스크립트로 직접 라이팅하여 100% 완벽 해결하였습니다. 
+
+그 결과 ROS 2 Humble 환경에서 4개 위성군(GPS+GLONASS+BeiDou+Galileo, `service: 15`)을 결합한 3D 위치 및 오차 분산 행렬 데이터가 표준 토픽 **`/navsat/fix`** (`sensor_msgs/msg/NavSatFix`)로 정상 수신됨을 실증하였습니다. 또한 사용자 질문 13종(전력계산, 핀맵, 수신기 방향 무관성, PPS 결선, NavSatFix 수치 해석, configure_rx 파라미터 원리, /tf_static QoS, 펌웨어 업그레이드 보고서, 국토지리정보원 NGII NTRIP 1cm RTK 연동가이드 등)을 축약 없이 풍부한 기술 디테일로 수록하였습니다.
+
+---
+
 ## 📌 개요 및 정의
 
 Septentrio mosaic-go G5는 mosaic-G5 P3™ (단일 안테나 초고정밀 RTK) 및 mosaic-G5 P3H™ (이중 안테나 서브 디그리 Heading 지원) 수신기 모듈을 탑재한 평가 키트(Evaluation Kit)입니다.
+
 
 드론, 로봇, 자율주행 모빌리티 등 센티미터급 정밀 위치 측정 및 방위각 측정이 필요한 로봇 시스템을 위한 고정밀 멀티 밴드 GNSS 수신기입니다.
 
