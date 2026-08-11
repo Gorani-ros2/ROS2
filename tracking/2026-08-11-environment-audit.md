@@ -6,7 +6,8 @@
 
 ## 🖥️ 1. 호스트 PC 및 실행 환경 정보 (Host Environment)
 
-* **호스트명 (Hostname)**: `knu`
+* **호스트 장비 구분 (Machine / Host)**: `knu laptop` (KNU Laptop / 노트북 컴퓨터)
+* **시스템 호스트명 (System Hostname)**: `knu`
 * **운영체제 (OS)**: Ubuntu 22.04.5 LTS (x86_64)
 * **커널 버전 (Kernel)**: Linux 6.8.0-136-generic
 * **작업 디렉토리 경로 (Local Workspaces)**:
