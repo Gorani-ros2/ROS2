@@ -40,3 +40,16 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 - 새 장비 모델 문서화: `templates/hardware-doc-template.md` ➔ `hardware/카테고리/제조사-모델명-kebab-case.md`
 - 새 소프트웨어 주제 문서화: `templates/software-doc-template.md` ➔ `software/카테고리/주제-kebab-case.md`
 
+---
+
+## 🤖 AI 어시스턴트 필수 협업 수칙 (AI Collaboration Protocol)
+
+다중 PC(`knu laptop`, `knu desktop`) 및 다중 AI 환경에서 작업 연속성을 보장하기 위해 다음 수칙을 **모든 AI가 의무 적용**합니다 ([`AGENTS.md`](AGENTS.md) 참조):
+
+1. **상세 기술 문답 100% 저장**: 사용자의 질문과 해결 답안은 함축 없이 디테일하게 작성.
+2. **다중 카테고리 중복 수록 허용**: 내용이 해당되면 `hardware/`와 `software/` 양쪽에 빠짐없이 중복 기재.
+3. **루트 README.md 최신화**: 작업 후 `📢 최근 핵심 업데이트 내역` 섹션에 개발 PC, 작업 내역, 링크 필수 업데이트.
+4. **환경 Audit 이력 기록**: `tracking/YYYY-MM-DD-environment-audit.md`에 호스트명(`knu laptop`), OS, AI 모델명, 손댄 로컬 폴더 기록.
+5. **작업 인수인계 보장**: 다음 AI가 `git pull` 후 즉시 다음 단계(예: RUT241 LTE NTRIP B모드, 라이다 PPS 동기화 등)를 이어받을 수 있게 작업 상태 명시.
+
+
