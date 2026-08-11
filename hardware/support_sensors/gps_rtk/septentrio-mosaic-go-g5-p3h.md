@@ -212,4 +212,15 @@ position_covariance_type: 3
   * **방법 B (ROS 2 `ntrip_client` 패키지)**: `ros2 run ntrip_client ntrip_ros5` 노드를 구동하여 인터넷에서 RTCM3 보정 데이터를 수신받아 ROS 토픽으로 수신기에 주입
   * **방법 C (Teltonika RUT241 LTE 라우터)**: SIM 카드 삽입 후 라우터 자체 NTRIP Client 기능을 켜서 라우터가 직접 수신기로 RTCM3 보정 신호를 공급
 
+---
+
+### Q13. 펌웨어 업그레이드(v1.1.0) 진행 절차 및 적용 결과는?
+* **사용 파일**: `sub_sensors` 폴더 내 `mosaic-G5 P3H_fwp_1.1.0.zip` 압축 해제 ➔ `mosaic-G5 P3H-1.1.0.suf`
+* **업그레이드 절차**:
+  1. 수신기에 시리얼 명령 `exeResetReceiver, Upgrade, none` 전송하여 업그레이드 부트로더 모드 진입
+  2. 수신기가 `Ready for SUF download` 응답 출력 후, 2.95MB 용량의 `.suf` 파일 바이너리 스트리밍 송신
+  3. 수신기 내부 플래시 메모리 프로그래밍 및 CRC 무결성 검증 (`SUF fully processed`) 후 자동 재부팅
+* **최종 결과**: 펌웨어 v1.1.0 정식 적용 완료. 구 펌웨어 경고 메시지 완전 소멸 및 ROS 2 `septentrio_gnss_driver` SBF 파싱 100% 정상 가동.
+
+
 
