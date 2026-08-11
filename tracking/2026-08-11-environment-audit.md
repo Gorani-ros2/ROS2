@@ -26,7 +26,13 @@
 
 ## 📁 3. 작업 및 변경된 로컬 폴더/파일 내역
 
-### 📂 디렉토리: `/home/knu/workspaces/insta360/`
+### 📂 로컬 원본 작업 폴더: `/home/knu/workspaces/sensors/sub_sensors/`
+* **접근 및 작업 내용**: 사용자가 배치한 원본 센서 PDF 문서 및 펌웨어 압축 파일 판독/추출 수행
+  * `mosaic-G5 P3H_fwp_1.1.0.zip`: 압축 해제 후 `mosaic-G5 P3H-1.1.0.suf` 펌웨어를 읽어 수신기 라이팅 수행
+  * `antinfo-26.1.0-mosaic-G5 P3H.suf`: 안테나 칼리브레이션 정보 확인
+  * `Septentrio_mosaic-go_G5_P3H.pdf`, `안테나.pdf`, `RUT241.pdf`: 기술 사양 분석 및 문서화 참조
+
+### 📂 로컬 Git 레포지토리 폴더: `/home/knu/workspaces/insta360/`
 
 1. **`hardware/support_sensors/gps_rtk/`** (Septentrio RTK 수신기 & Tallysman 안테나)
    * `septentrio-mosaic-go-g5-p3h.md`: 기술 사양, Q1~Q13 질문과 답변, 펌웨어 v1.1.0 업그레이드 보고서 작성

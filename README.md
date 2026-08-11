@@ -8,6 +8,7 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 
 ### 📌 2026-08-11: Septentrio RTK GNSS & 안테나 통합 완료 및 펌웨어 v1.1.0 업그레이드
 - **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
+- **로컬 원본 작업 폴더**: `/home/knu/workspaces/sensors/sub_sensors/` (PDF 및 펌웨어 zip 판독/추출)
 - **Septentrio mosaic-go G5 P3H 펌웨어 업그레이드**:
   - `sub_sensors` 제공 `mosaic-G5 P3H-1.1.0.suf` 바이너리 수신기 플래시 메모리 라이팅 완료.
   - 구 펌웨어(v1.0.0)의 `[WARN] firmware version 1.0.0` 경고 및 SBF 명령어 구문 에러 100% 해결.
