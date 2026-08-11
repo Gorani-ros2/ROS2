@@ -183,3 +183,33 @@ position_covariance_type: 3
 * **구 펌웨어 (v1.0.0)**: SBF 바이너리 파싱 실패로 드라이버가 텍스트 NMEA 백업 패스스루만 구동하여 NMEA 토픽(`/gpgga`, `/gprmc`)만 내보냈습니다.
 * **신규 펌웨어 (v1.1.0)**: SBF 바이너리 수신(`PVTGeodetic`)이 100% 정상화되어 ROS 표준 위치 메시지인 **`/navsat/fix`** (및 `/navsat/poscovgeodetic`)를 파싱 및 직접 내보내게 되었습니다.
 
+---
+
+### Q10. 동일한 안테나 위치에서도 분산 행렬(Covariance Matrix) 수치가 계속 변하는 이유는?
+* **원인**: 약 20,000km 상공에서 이동하는 위성의 기하학적 배치(DOP 지수), 대기층(전離層/대기권) 신호 지연 및 굴절 오차, 주변 건물 반사파(Multipath), 위성 신호 세기(C/N0)가 1초마다 동적으로 변하기 때문입니다.
+* Septentrio 수신기 내부의 칼만 필터(Kalman Filter)가 1Hz 매 초마다 실시간 신호 품질을 평가하여 오차 범위($\sigma_x, \sigma_y, \sigma_z$)를 동적으로 재계산합니다.
+
+---
+
+### Q11. 현재 출력되는 `/navsat/fix` 데이터는 RTK 보정 데이터가 포함된 것인가요?
+* **아닙니다 (Standalone Multi-GNSS 3D Fix 상태).**
+* 현재 `status.status` 값은 `0` (`STATUS_FIX`)으로, RTK 보정 없이 4개 위성군(GPS, GLONASS, BeiDou, Galileo)의 위성 신호만을 이용해 위치를 잡은 **단독 측위 상태 (오차 약 1.5m ~ 4m)**입니다.
+* 인터넷(NTRIP)을 통해 국토지리정보원 보정 신호를 입력하면 `status.status`가 `2` (`STATUS_GBAS_FIX` / RTK Fixed)로 변경되며 **1cm ~ 2cm 센티미터 급 정밀도**로 고정됩니다.
+
+---
+
+### Q12. 국토지리정보원(NGII) 보정 데이터(NTRIP)를 받아 RTK 1cm 정밀도를 연동하는 방법은?
+* **개요**: 국토지리정보원(NGII)은 전국 상시관측소 데이터를 기반으로 무료 RTK 보정 신호(RTCM 3.x)를 인터넷(NTRIP 프로토콜)으로 제공합니다.
+* **1단계: 무료 계정 가입 및 정보 확인**
+  * 국토위성센터 GNSS 국토지리정보원 통합기준점 사이트([gnss.ngii.go.kr](http://gnss.ngii.go.kr)) 회원가입
+  * **NTRIP 접속 정보**:
+    * **주소 (Caster)**: `rtk.ngii.go.kr` (또는 `211.175.76.10`)
+    * **포트 (Port)**: `2101`
+    * **마운트포인트 (Mountpoint)**: `VRS-RTCM32` (또는 `VRS-RTCM30`, `FKP-RTCM32`)
+    * **ID / PW**: 국토지리정보원 가입 아이디 / 비밀번호
+* **2단계: 연동 방법 (3가지 중 선택)**
+  * **방법 A (Septentrio 웹 UI 설정)**: `http://192.168.3.1` ➔ `NTRIP Client` 메뉴에 위 계정 정보 입력 (노트북 Wi-Fi 또는 LTE 라우터 통신 이용)
+  * **방법 B (ROS 2 `ntrip_client` 패키지)**: `ros2 run ntrip_client ntrip_ros5` 노드를 구동하여 인터넷에서 RTCM3 보정 데이터를 수신받아 ROS 토픽으로 수신기에 주입
+  * **방법 C (Teltonika RUT241 LTE 라우터)**: SIM 카드 삽입 후 라우터 자체 NTRIP Client 기능을 켜서 라우터가 직접 수신기로 RTCM3 보정 신호를 공급
+
+
