@@ -1,24 +1,28 @@
 # 🤖 다중 PC & AI 협업 및 표준 작성 가이드라인 (Multi-PC & Multi-AI Collaboration Protocol)
 
-본 레포지토리(`Gorani-ros2/ROS2`)는 여러 노트북(`knu laptop`) 및 데스크톱(`knu desktop`) PC 환경에서 다양한 AI 어시스턴트(Antigravity 등)가 협업하여 지식을 작성하고 유지보수하는 **중앙 핵심 기술 허브(Central Core Technology Hub)**입니다.
+본 레포지토리(`Gorani-ros2/ROS2`)는 여러 노트북(`knu laptop`) 및 데스크톱(`knu desktop`) PC 환경에서 다양한 AI 어시스턴트(Antigravity 등)가 협업하여 지식을 작성하고 유지보수하는 **공개(Public) 중앙 핵심 기술 허브(Central Core Technology Hub)**입니다.
 
-이 레포지토리를 작업하는 **모든 AI 어시스턴트는 문서 구조의 통일성, 타 레포지토리와의 지식 공유, 질의응답 및 작업 이력의 완벽한 연속성을 위해 아래 8대 협업 규칙을 철저히 준수**해야 합니다.
+이 레포지토리를 작업하는 **모든 AI 어시스턴트는 퍼블릭 레포지토리의 보안, 문서 구조의 통일성, 타 레포지토리와의 지식 공유, 질의응답 및 작업 이력의 완벽한 연속성을 위해 아래 9대 협업 규칙을 철저히 준수**해야 합니다.
 
 ---
 
-## 📜 AI 필수 준수 8대 수칙 (Mandatory AI Rules)
+## 📜 AI 필수 준수 9대 수칙 (Mandatory AI Rules)
 
-### 1. 🌐 중앙 핵심 기술 허브 및 다중 레포지토리 지식 선순환 (Cross-Repository Knowledge Hub Rule)
+### 1. 🔒 퍼블릭(Public) 레포지토리 민감 정보 및 기밀 파라미터 유출 방지 (Public Security & Secrets Rule)
+* **본 레포지토리는 공개(Public) 레포지토리**이므로, 유출에 민감한 **기업 기밀 소스코드, 개인/기관 비밀번호(예: 국토지리정보원 NTRIP PW), API 키, SSH 시크릿, 보안 파라미터 수치**를 절대로 마크다운 문서나 코드에 직접 하드코딩하여 올려서는 안 된다.
+* 민감 정보는 반드시 플레이스홀더(예: `<YOUR_NGII_PASSWORD>`, `<PRIVATE_KEY>`)나 환경 변수, `.gitignore` 처리된 별도 보안 설정 파일로 대체하여 표기한다.
+
+### 2. 🌐 중앙 핵심 기술 허브 및 다중 레포지토리 지식 선순환 (Cross-Repository Knowledge Hub Rule)
 * 본 레포지토리는 안동 로봇(Andong Robot) 프로젝트, 피노타이핑(Phenotyping) 프로젝트, 논문(Paper/Thesis) 작성 레포지토리 등 모든 응용 프로젝트의 **중앙 핵심 기술 지식 보관소** 역할을 수행한다.
 * 타 응용 레포지토리 작업 중 검증된 센서 융합, 파서 노드, 하드웨어 설정 기술은 본 ROS 2 레포지토리에 표준 템플릿 규격으로 백업/업로드하여 재사용성을 확보한다.
 * 반대로 타 응용 레포지토리에서 로봇/센서 시스템을 구동할 때는 본 ROS 2 레포지토리에 정리된 검증 노드, 핀맵, 1줄 명령어를 참조하여 이식 및 활용한다.
 
-### 2. 🔗 상호 쌍방향 마크다운 십자 링크 필수 (Mandatory Bidirectional Cross-Linking Rule)
+### 3. 🔗 상호 쌍방향 마크다운 십자 링크 필수 (Mandatory Bidirectional Cross-Linking Rule)
 * 모든 하드웨어 문서(`hardware/`)는 연동되는 파서 노드/드라이버 문서(`software/`)로 이동하는 마크다운 링크를 반드시 상단에 포함한다.
 * 모든 소프트웨어 문서(`software/`)는 연동되는 하드웨어 장비/안테나 문서(`hardware/`)로 이동하는 마크다운 링크를 반드시 상단에 포함한다.
 * 개발자가 어떤 문서를 읽더라도 단 1번의 클릭으로 관련된 소프트웨어/하드웨어 문서 간을 **자유롭게 오갈 수 있도록 양방향 링크를 100% 보장**한다.
 
-### 3. 📐 통일된 표준 문서 구조 준수 (Unified Document Structure Rule)
+### 4. 📐 통일된 표준 문서 구조 준수 (Unified Document Structure Rule)
 * 새로 작성하거나 수정한 모든 문서는 `templates/` 디렉토리의 표준 템플릿 구조와 작성 순서를 엄격히 준수한다.
 * **하드웨어 문서 순서 (`hardware-doc-template.md`)**:
   1. `# 📑 [제조사] [모델명] [장비 카테고리]`
@@ -40,21 +44,21 @@
   7. `## 6. ❓ 개발/테스트 Q&A 및 트러블슈팅`
   8. `## 7. 발열 및 안전 관리 수칙`
 
-### 4. 📝 사용자 질의응답 및 해결 답변의 100% 상세 문서화 (Rich Detail Rule)
+### 5. 📝 사용자 질의응답 및 해결 답변의 100% 상세 문서화 (Rich Detail Rule)
 * 사용자와 주고받은 모든 질의응답(Q&A), 에러 원인 분석, 펌웨어 업그레이드 절차, 파라미터 의미, 명령어를 절대 함축하거나 생략하지 말고 **풍부하고 정밀한 기술적 디테일**로 해당 문서의 Q&A 섹션에 수록한다.
 
-### 5. 🗂️ Hardware 및 Software 다중 관련 카테고리 중복 수록 허용 (Cross-Referencing Rule)
+### 6. 🗂️ Hardware 및 Software 다중 관련 카테고리 중복 수록 허용 (Cross-Referencing Rule)
 * 센서 사양, 핀맵, 전력, 물리 배치 등은 `hardware/` 하위 문서에 작성한다.
 * 드라이버, ROS 2 토픽, 파싱 노드, 동기화 스크립트 등은 `software/` 하위 문서에 작성한다.
 * 하드웨어와 소프트웨어 양쪽에 관련된 주제일 경우, **내용이 중복되더라도 상관없이 관련 있는 모든 카테고리 문서에 빠짐없이 상세히 작성**한다.
 
-### 6. 📢 루트 `README.md` 최신 업데이트 섹션 필히 반영 (Root README Mandate)
+### 7. 📢 루트 `README.md` 최신 업데이트 섹션 필히 반영 (Root README Mandate)
 * 작업이 완료될 때마다 반드시 레포지토리 최상위 [`README.md`](../../README.md)의 **`📢 최근 핵심 업데이트 내역 (Latest Updates)`** 섹션을 업데이트한다.
 * 업데이트 내역에는 **[작업 일자], [수행 개발 장비 구분 (예: knu laptop / knu desktop)], [로컬 원본 작업 폴더 경로], [작업 내용 요약], [수정/생성된 문서 링크]**를 빠짐없이 기재한다.
 
-### 7. 💻 개발 환경 및 AI 이력 트래킹 리포트 저장 (Environment Audit Rule)
+### 8. 💻 개발 환경 및 AI 이력 트래킹 리포트 저장 (Environment Audit Rule)
 * 매 작업 시 [`tracking/YYYY-MM-DD-environment-audit.md`](../../tracking/) 리포트 파일을 작성하여 깃에 커밋한다.
 * 리포트에는 **호스트 장비 구분(`knu laptop` 등), OS 정보, 작업 수행 AI 이름, 로컬 원본 작업 폴더 경로, 손댄 파일 내역**을 명확히 밝힌다.
 
-### 8. 🔄 다른 AI가 즉시 작업을 이어받을 수 있는 완벽한 연속성 보장 (Seamless Continuation)
+### 9. 🔄 다른 AI가 즉시 작업을 이어받을 수 있는 완벽한 연속성 보장 (Seamless Continuation)
 * 작업 종료 시 현재 완료된 상태, 미해결 이슈, 다음 예정 작업(예: Teltonika RUT241 LTE 라우터 유심 도착 후 NTRIP 방법 B 세팅, 라이다 PPS 시간 동기화 결선 등)을 문서에 명확히 남겨, **다른 PC나 다른 AI가 `git pull`을 받아 이 레포지토리를 열었을 때 바로 이전맥락을 이해하고 작업을 이어갈 수 있도록** 구성한다.
