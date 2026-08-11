@@ -127,3 +127,59 @@ Septentrio mosaic-go G5는 mosaic-G5 P3™ (단일 안테나 초고정밀 RTK) �
   * Septentrio 10-pin 헤더 **`PPS` 핀** ➔ Ouster Interface Box **`SYNC_PULSE_IN` (+)**
   * Septentrio 10-pin 헤더 **`GND` 핀** ➔ Ouster Interface Box **`GND` (-)**
 * **라이다 설정**: `my_ouster_params.yaml`에 `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"` 적용.
+
+---
+
+### Q6. ROS 2 `sensor_msgs/msg/NavSatFix` 메세지 각 필드의 상세 의미는?
+```yaml
+header:
+  stamp:
+    sec: 1786424850
+    nanosec: 975653337
+  frame_id: gnss
+status:
+  status: 0
+  service: 15
+latitude: 36.11776659406625
+longitude: 128.63186570005357
+altitude: 141.23728296236337
+position_covariance:
+- 3.154019355773926
+- 0.0
+- 0.0
+- 0.0
+- 21.924036026000977
+- 0.0
+- 0.0
+- 0.0
+- 20.45357322692871
+position_covariance_type: 3
+```
+* **`header.stamp`**: 데이터 측정 시각 (Unix 초 단위 `sec` + 나노초 `nanosec`).
+* **`header.frame_id`**: 로봇 TF 트리의 수신기 좌표계 이름 (`gnss`).
+* **`status.status`**: 측위 상태 구분 지수 (`0` = Standalone 3D Fix, `1` = DGPS, `2` = RTK Float/Fix).
+* **`status.service`**: 수신 조합 비트마스크 (`15` = `1(GPS) + 2(GLONASS) + 4(BeiDou) + 8(Galileo)`, 4개 위성군 동시 수신 중).
+* **`latitude` / `longitude` / `altitude`**: WGS84 위도($^\circ N$), 경도($^\circ E$), 고도($m$).
+* **`position_covariance`**: $3 \times 3$ 위치 오차 분산 행렬 ($\text{m}^2$).
+  * 대각 성분: East 오차 분산 $\sigma_x^2 = 3.154$ ($\approx 1.77\text{m}$ 오차), North 오차 분산 $\sigma_y^2 = 21.924$ ($\approx 4.68\text{m}$ 오차), Alt 오차 분산 $\sigma_z^2 = 20.453$ ($\approx 4.52\text{m}$ 오차).
+* **`position_covariance_type`**: `3` (`COVARIANCE_TYPE_KNOWN`, Septentrio 칼만 필터가 산출한 정밀 공분산 적용).
+
+---
+
+### Q7. `-p configure_rx:=false` 옵션을 붙였을 때와 안 붙였을 때의 결과가 펌웨어 업데이트 후 똑같아진 이유는?
+* **구 펌웨어 (v1.0.0)**: 드라이버 기본값(`configure_rx:=true`)이 펌웨어 v1.0.0에서 지원하지 않는 SBF 명령어를 전송하여 에러가 발생했으나, `configure_rx:=false`로 자동 설정을 건너뛰어 우회 수신했습니다.
+* **신규 펌웨어 (v1.1.0)**: 수신기 내부 SBF 명령어 구문 해석기가 최신화되어, `configure_rx:=true`이든 `false`이든 에러 없이 완벽하게 SBF 명령어를 정상 처리하게 되었습니다.
+
+---
+
+### Q8. ROS 2 토픽 `/tf`와 `/tf_static`의 정체와 `echo` 시 데이터가 안 나오는 이유는?
+* **`/tf`**: 로봇 이동에 따라 동적으로 변하는 좌표 변환 트리를 담당합니다.
+* **`/tf_static`**: 센서 설치 위치 등 고정된 좌표 변환 정보를 담당합니다.
+* **데이터 미출력 이유**: `/tf_static`은 메시지를 매초 계속 쏘지 않고 **노드 시작 시 1회만 발행 (`TRANSIENT_LOCAL` QoS)**합니다. 노드 구동 후에 `echo`하면 지나간 메시지를 놓치므로 `ros2 topic echo /tf_static --qos-durability transient_local`로 조회해야 합니다.
+
+---
+
+### Q9. 펌웨어 업그레이드 후 토픽이 `/gpgga`, `/gprmc`에서 `/navsat/fix`로 변경된 이유는?
+* **구 펌웨어 (v1.0.0)**: SBF 바이너리 파싱 실패로 드라이버가 텍스트 NMEA 백업 패스스루만 구동하여 NMEA 토픽(`/gpgga`, `/gprmc`)만 내보냈습니다.
+* **신규 펌웨어 (v1.1.0)**: SBF 바이너리 수신(`PVTGeodetic`)이 100% 정상화되어 ROS 표준 위치 메시지인 **`/navsat/fix`** (및 `/navsat/poscovgeodetic`)를 파싱 및 직접 내보내게 되었습니다.
+
