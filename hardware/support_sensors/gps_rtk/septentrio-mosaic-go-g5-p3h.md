@@ -83,3 +83,36 @@ Septentrio mosaic-go G5는 mosaic-G5 P3™ (단일 안테나 초고정밀 RTK) �
   - `/navsat/fix` (`sensor_msgs/msg/NavSatFix`) — 위도, 경도, 고도 및 RTK Status
   - `/navsat/vel` (`geometry_msgs/msg/TwistStamped`) — 3D 이동 속도
   - `/navsat/heading` (`sensor_msgs/msg/Imu` 또는 커스텀 메시지) — 이중 안테나 방위각
+
+---
+
+## 🛠️ 실전 하드웨어 구축 및 케이블/배치 가이드 (Q&A 정리)
+
+### 1. 전원 공급 및 케이블 선택 (USB A-to-C vs C-to-C)
+- **전력 소모량**: 수신기 본체 + 활성 안테나 합산 전력은 약 **1.5W ~ 1.8W max** (5V DC).
+- **케이블 상호 호환성**:
+  - 표준 USB 2.0 A-to-C 포트(최소 2.5W 공급) 및 USB C-to-C 포트(15W+ 공급) **모두 100% 전력 넉넉하게 작동**함.
+  - PC/노트북 연결 시 전원 공급 + NMEA 데이터 송수신 + 웹 UI(`http://192.168.3.1`) 접속이 단일 USB 케이블로 처리됨.
+
+### 2. JST 6-pin COM1 & Power Open-Ended 케이블 (4선 핀맵)
+- **배선 핀맵**:
+  - 🔴 **Red**: `V_IN` (+5V 외부 전원 입력)
+  - 🖤 **Black**: `GND` (공통 접지)
+  - 🟡 **Yellow**: `TXD1` (COM1 3.3V LVTTL 시리얼 데이터 송신)
+  - 🔵 **Blue**: `RXD1` (COM1 3.3V LVTTL 시리얼 데이터 수신)
+- **사용 지침**: 오토파일럿(Pixhawk/PX4)이나 외부 MCU 직결 전용이며, 노트북 USB 연결 시에는 미사용(연결 불필요).
+
+### 3. 안테나 체결 포트 배치 규칙 (MAIN vs AUX)
+- **단일 안테나 수신 시**: 반드시 **`MAIN` 포트**에 체결 (위도, 경도, 고도, RTK, 속도, PPS 전담).
+- **이중 안테나 수신 시**: `MAIN` 포트(뒤쪽) + **`AUX` 포트**(앞쪽) 체결 (정지 시 서브 디그리 Heading 방위각 계산용).
+
+### 4. 안테나 설치 장소 및 오리엔테이션
+- **방향 (Orientation)**: 안테나 하단 자석/평면(배)이 아래쪽 철판/지면을 향하고, **상단 둥근 돔(등)이 위쪽(하늘)을 똑바로 바라보도록 부착**.
+- **위치 (Location)**: 로봇/차량의 상방에 차폐물이 없는 최상단 수평면에 위치하여 멀티패스 반사파 및 신호 왜곡 방지.
+- **이중 안테나 이격 거리**: 최소 **30~50cm 이상** (권장 **1m 이상** 이격 시 Heading 오차 0.15° 달성). 수신기 본체와 안테나 간 거리는 케이블 길이 내 자유 배치 가능.
+
+### 5. Ouster OS0-128 3D 라이다 PPS 하드웨어 동기화 연동
+- Septentrio 10-pin 헤더의 **`PPS` (1Hz Pulse Per Second) 핀** ➔ Ouster Interface Box의 **`SYNC_PULSE_IN` (+)**에 연결.
+- Septentrio **`GND` 핀** ➔ Ouster Interface Box **`GND` (-)**에 연결.
+- 마이크로초(µs) 단위로 라이다 점군 타임스탬프와 GNSS 수신기 절대 시각을 강제 고정.
+
