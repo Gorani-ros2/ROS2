@@ -10,6 +10,15 @@ Septentrio mosaic-go G5는 mosaic-G5 P3™ (단일 안테나 초고정밀 RTK) �
 
 ---
 
+## 🔗 관련 소프트웨어 및 센서 십자 링크 (Cross-Links)
+* 📡 **체결 3중 대역 안테나**: [`Tallysman TW7972 안테나`](tallysman-tw7972-antenna.md)
+* 💻 **자체 구현 ROS 2 NMEA 파서 노드**: [`septentrio_nmea_fix_node.py`](../../../software/ros2_basics/septentrio_nmea_fix_node.py)
+* 📹 **라이다-카메라-GNSS 동기화 녹화**: [`lidar-insta360-sync-record.md`](../../../software/sensorfusion/lidar-insta360-sync-record.md)
+* 🌐 **4G LTE 라우터 (NTRIP 연동)**: [`Teltonika RUT241 라우터`](../router/teltonika-rut241.md)
+
+---
+
+
 ## 📊 데이터시트 및 핵심 스펙
 
 ### 1. GNSS 수신 및 채널 사양

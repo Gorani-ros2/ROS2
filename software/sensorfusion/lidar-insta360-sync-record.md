@@ -10,6 +10,8 @@ Ouster OS0-128 3D 라이다와 Insta360 360도 파노라마 카메라의 이종(
 
 - [Ouster OS0-128 3D 라이다](../../hardware/vision_sensors/lidar/ouster-os0-128.md)
 - [Insta360 파노라마 카메라 (Camera SDK)](../../hardware/vision_sensors/camera/insta360-camera-sdk.md)
+- [Septentrio mosaic-go G5 P3H RTK 수신기](../../hardware/support_sensors/gps_rtk/septentrio-mosaic-go-g5-p3h.md)
+
 
 ---
 
