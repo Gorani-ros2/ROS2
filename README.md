@@ -6,6 +6,14 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 
 ## 📢 최근 핵심 업데이트 내역 (Latest Updates)
 
+### 📌 2026-08-14: Teltonika RUT241 LTE 라우터 유심 셀프개통(OMD 등록/IMEI) 및 무선 데이터 테스트 가이드 추가
+- **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
+- **자급제 LTE 라우터 유심 등록 이슈 해결**:
+  - 스마트폰 셀프개통 서식의 모델명/7자리 일련번호 미존재 이슈 원인 분석 및 해결 방안(통신사 114 OMD 라우터 IMEI 등록, 유심기변, OMD 공통 코드 `OMD 기타 LTE 라우터`/`PTA-TYPE5` 기재) 정리.
+- **RUT241 네트워크 무선 데이터 전송 동작 검증 4단계 수칙 수록**:
+  - LED 상태등(Power/4G/Signal), PC 접속 및 [fast.com](https://fast.com) 속도 측정, WebUI(`192.168.1.1`) RSRP/SINR 수신 신호 품질 진단, Ping 연속 패킷 테스트 및 APN 수동 설정 가이드 문서화.
+- **관련 문서**: [`hardware/support_sensors/router/teltonika-rut241.md`](hardware/support_sensors/router/teltonika-rut241.md)
+
 ### 📌 2026-08-11: Septentrio RTK GNSS & 안테나 통합 완료 및 펌웨어 v1.1.0 업그레이드
 - **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
 - **로컬 원본 작업 폴더**: `/home/knu/workspaces/sensors/sub_sensors/` (PDF 및 펌웨어 zip 판독/추출)

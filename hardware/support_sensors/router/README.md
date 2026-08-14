@@ -6,7 +6,7 @@
 
 ## 문서 목록
 
-- [Teltonika RUT241 산업용 4G LTE 라우터](teltonika-rut241.md) — [PDF 원본](teltonika-rut241.pdf) / 4G LTE Cat 4, Wi-Fi 4, Dual Ethernet, OpenWrt RutOS, OpenVPN/WireGuard, KC 인증 사양
+- [Teltonika RUT241 산업용 4G LTE 라우터](teltonika-rut241.md) — [PDF 원본](teltonika-rut241.pdf) / 4G LTE Cat 4, Wi-Fi 4, Dual Ethernet, OpenWrt RutOS, OpenVPN/WireGuard, KC 인증 사양, 유심 개통(OMD/IMEI) 및 네트워크 동작 검증 가이드 수록
 
 ## 이 폴더의 문서
 
