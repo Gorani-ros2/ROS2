@@ -1,1 +1,13 @@
 docs/superpowers/
+*.bak
+*.bak*
+__pycache__/
+build/
+*.json
+Android-SDK-V1.10.1/
+CameraSDK-*/
+Desktop-CameraSDK-*/
+Desktop-MediaSDK-*/
+Linux_CameraSDK-*/
+ouster_ros2/
+test_example

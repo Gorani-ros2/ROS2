@@ -63,5 +63,7 @@ When assisting the user or making edits to this repository, you MUST strictly ad
 - Every session MUST create or update a tracking log under `tracking/YYYY-MM-DD-environment-audit.md`.
 - State the machine identifier (`knu laptop`), OS, AI model identity, local raw resource paths (e.g. `/home/knu/workspaces/sensors/sub_sensors`), and affected file list.
 
-### 9. 🔄 Seamless Continuation Protocol for Next AI / Session
-- Always record current completion status and upcoming tasks (e.g. Teltonika RUT241 LTE Router NTRIP Client B-mode, Ouster LiDAR PPS time sync) in the docs and tracking files so that **any other AI on another computer can `git pull` and immediately pick up where you left off**.
+### 10. 🔌 Septentrio mosaic-go G5 하드웨어 폼팩터 팩트 메모리 (Hardware Fact Guardrail)
+- **Septentrio mosaic-go G5 평가키트 하드웨어 폼팩터**: 본체에 **물리 RJ45 랜포트가 존재하지 않습니다!**
+- **인터페이스 규격**: 오직 **USB-C 포트** (5V 전원 + USB-Ethernet `192.168.3.1` / 시리얼 `/dev/ttyACM1`) 및 JST-GH/10-pin 헤더만 장착되어 있습니다.
+- **RTK 보정 연동 원리**: 절대로 수신기에 RJ45 랜선을 직결하라고 안내해서는 안 되며, 반드시 노트북/엣지 PC에서 파이썬 ROS 2 브릿지 노드([`septentrio_ngii_ntrip_bridge.py`](software/ros2_basics/septentrio_ngii_ntrip_bridge.py))를 구동하여 LTE 인터넷(RUT241)을 통해 받아온 NGII RTCM3 보정 데이터를 USB 시리얼 포트(`/dev/ttyACM1`)로 주입하는 파이프라인만 제시해야 합니다.

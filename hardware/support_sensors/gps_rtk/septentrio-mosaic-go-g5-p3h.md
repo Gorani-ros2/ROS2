@@ -29,9 +29,12 @@ Septentrio mosaic-go G5는 mosaic-G5 P3™ (단일 안테나 초고정밀 RTK) �
 
 ## 🔗 관련 소프트웨어 및 센서 십자 링크 (Cross-Links)
 * 📡 **체결 3중 대역 안테나**: [`Tallysman TW7972 안테나`](tallysman-tw7972-antenna.md)
-* 💻 **자체 구현 ROS 2 NMEA 파서 노드**: [`septentrio_nmea_fix_node.py`](../../../software/ros2_basics/septentrio_nmea_fix_node.py)
+* 💻 **통합 ROS 2 NGII NTRIP RTK 브릿지 노드**: [`septentrio_ngii_ntrip_bridge.md`](../../../software/ros2_basics/septentrio_ngii_ntrip_bridge.md)
+* ⏱️ **하드웨어 PPS 동기화 및 Bag 검증**: [`lidar-rtk-pps-sync-bag.md`](../../../software/sensorfusion/lidar-rtk-pps-sync-bag.md)
+* 🌐 **RTK MQTT DB 연동 브릿지**: [`rtk-mqtt-db-bridge.md`](../../../software/protocol/rtk-mqtt-db-bridge.md)
 * 📹 **라이다-카메라-GNSS 동기화 녹화**: [`lidar-insta360-sync-record.md`](../../../software/sensorfusion/lidar-insta360-sync-record.md)
 * 🌐 **4G LTE 라우터 (NTRIP 연동)**: [`Teltonika RUT241 라우터`](../router/teltonika-rut241.md)
+
 
 ---
 
@@ -224,19 +227,16 @@ position_covariance_type: 3
 
 ---
 
-### Q12. 국토지리정보원(NGII) 보정 데이터(NTRIP)를 받아 RTK 1cm 정밀도를 연동하는 방법은?
-* **개요**: 국토지리정보원(NGII)은 전국 상시관측소 데이터를 기반으로 무료 RTK 보정 신호(RTCM 3.x)를 인터넷(NTRIP 프로토콜)으로 제공합니다.
-* **1단계: 무료 계정 가입 및 정보 확인**
-  * 국토위성센터 GNSS 국토지리정보원 통합기준점 사이트([gnss.ngii.go.kr](http://gnss.ngii.go.kr)) 회원가입
-  * **NTRIP 접속 정보**:
-    * **주소 (Caster)**: `rtk.ngii.go.kr` (또는 `211.175.76.10`)
-    * **포트 (Port)**: `2101`
-    * **마운트포인트 (Mountpoint)**: `VRS-RTCM32` (또는 `VRS-RTCM30`, `FKP-RTCM32`)
-    * **ID / PW**: 국토지리정보원 가입 아이디 / 비밀번호
-* **2단계: 연동 방법 (3가지 중 선택)**
-  * **방법 A (Septentrio 웹 UI 설정)**: `http://192.168.3.1` ➔ `NTRIP Client` 메뉴에 위 계정 정보 입력 (노트북 Wi-Fi 또는 LTE 라우터 통신 이용)
-  * **방법 B (ROS 2 `ntrip_client` 패키지)**: `ros2 run ntrip_client ntrip_ros5` 노드를 구동하여 인터넷에서 RTCM3 보정 데이터를 수신받아 ROS 토픽으로 수신기에 주입
-  * **방법 C (Teltonika RUT241 LTE 라우터)**: SIM 카드 삽입 후 라우터 자체 NTRIP Client 기능을 켜서 라우터가 직접 수신기로 RTCM3 보정 신호를 공급
+### Q12. 국토지리정보원(NGII) 최신 보정 데이터(NTRIP) 연동 접속 정보 및 포털 변경 내역은?
+* **개요**: 국토지리정보원은 전국 상시관측소 데이터를 기반으로 무료 RTK 보정 신호(RTCM 3.x)를 인터넷(NTRIP 프로토콜)으로 제공합니다.
+* **1단계: GNSS 서비스 포털 회원가입 및 ID 확인**
+  * **통합 포털 웹사이트**: **[`https://geodesy.ngii.go.kr/portal/main`](https://geodesy.ngii.go.kr/portal/main)** (기존 `gnss.ngii.go.kr`에서 최신 통합 포털로 변경)
+  * 포털 로그인 후 **'측위보정정보(네트워크 RTK)'** 메뉴에서 서비스 이용 ID 생성/확인.
+* **2단계: 최신 NTRIP 접속 정보**
+  * **주소 (Caster / Host)**: **`rts1.ngii.go.kr`** (VRS 최신 주소 / FKP 사용 시 `rts2.ngii.go.kr`, 또는 IP `211.175.76.10`)
+  * **포트 (Port)**: **`2101`**
+  * **마운트포인트 (Mountpoint)**: **`VRS-RTCM32`** (권장: GPS+GLONASS+BeiDou+Galileo 4개 위성군) 또는 `VRS-RTCM30`
+  * **ID / Password**: GNSS 포털 발급 아이디 / **`ngii`** (RTK 서비스 전용 공통 비밀번호)
 
 ---
 
@@ -247,6 +247,92 @@ position_covariance_type: 3
   2. 수신기가 `Ready for SUF download` 응답 출력 후, 2.95MB 용량의 `.suf` 파일 바이너리 스트리밍 송신
   3. 수신기 내부 플래시 메모리 프로그래밍 및 CRC 무결성 검증 (`SUF fully processed`) 후 자동 재부팅
 * **최종 결과**: 펌웨어 v1.1.0 정식 적용 완료. 구 펌웨어 경고 메시지 완전 소멸 및 ROS 2 `septentrio_gnss_driver` SBF 파싱 100% 정상 가동.
+
+---
+
+### Q14. mosaic-go G5 평가키트에 RJ45 랜포트가 없는데 필드 로봇 하드웨어 연결은 어떻게 구성하나요?
+* **하드웨어 인터페이스**: mosaic-go G5 평가키트에는 RJ45 포트가 없으며 **USB-C 포트**가 5V 전원 공급 + USB-Ethernet(`192.168.3.1`) + NMEA 시리얼 통신을 단일 케이블로 통합 제공합니다.
+* **필드 로봇 온보드 연결 아키텍처**:
+  * **RUT241 LTE 라우터 ➔ 엣지 PC (노트북/Jetson)**: LAN 케이블 연결 (무선 LTE 인터넷 공급).
+  * **mosaic-go G5 수신기 ➔ 엣지 PC (노트북/Jetson)**: USB-C 케이블 연결 (전원 공급 및 USB 가상 이더넷 `192.168.3.1` 형성).
+  * **동작 원리**: 수신기는 USB-C가 형성한 가상 이더넷망을 통해 엣지 PC 및 RUT241 라우터를 경유하여 국토지리정보원(`rts1.ngii.go.kr`)에 접속합니다.
+
+---
+
+### Q15. 라우터 자체 NTRIP 모드 (방식 A) vs 수신기 자체 NTRIP 모드 (방식 B) 비교 및 최적 선택은?
+* **방식 A (라우터 처리)**: RUT241 라우터 웹페이지(`192.168.1.1`)에 계정을 등록하여 라우터가 보정 데이터를 다운로드받아 수신기로 전달.
+* **방식 B (수신기 처리 - 강력 추천)**: RUT241은 단순 무선 인터넷 통로 역할만 대어주고, mosaic-go G5 수신기 웹페이지(`192.168.3.1`)에서 계정을 등록하여 수신기가 직접 국토지리정보원에 접속.
+* **방식 B 선택 이유**: 야외 노지에서 LTE 신호 순간 단절 시 수신기 펌웨어가 5초 이내 자동 재접속(Auto-Reconnect)하여 RTK Fixed 상태를 완벽 복구하며, 수신기 단일 웹 화면에서 위성 SNR과 보정속도, 1cm 오차를 한눈에 관찰할 수 있어 모니터링 및 안전성이 가장 뛰어납니다.
+
+---
+
+### Q16. 방식 B를 쓸 때 mosaic-go G5 수신기가 안 필요한가요?
+* **반드시 필요합니다!** RUT241 라우터는 위성 안테나 칩이 없는 무선 통신 기기이므로 위성 전파를 전혀 수신하지 못합니다.
+* mosaic-go G5 수신기가 Tallysman 안테나로 우주 상공 2만 km의 위성 전파(GPS/GLONASS/BeiDou/Galileo)를 수신하고, 라우터가 준 보정 데이터(RTCM3)를 수신기 내부 칩셋에서 결합해야만 1cm 정밀 위치가 계산됩니다.
+
+---
+
+### Q17. 위성 신호 수신과 RTK 보정 데이터 수신의 결정적 차이 및 실내/실외 동작 원리는?
+* **위성 신호 (전파)**: 상공 2만 km의 인공위성이 쏘는 라디오 전파. **인터넷 0% 전혀 불필요**. 안테나로 수신. 콘크리트 실내 천장을 뚫지 못함.
+* **RTK 보정 데이터 (RTCM3)**: 지상 기준국 데이터. **인터넷 100% 필수**. RUT241 LTE망으로 수신.
+* **실내 테스트 실패 원인 분석**: 실내에서는 인터넷이 되므로 보정 데이터는 수신되나, 위성 전파가 콘크리트에 막혀 0개 수신되므로 연산 불가능(`NO_FIX`). 안테나를 실외(창문 밖 또는 하늘이 보이는 곳)로 배치해야 1cm RTK Fixed가 고정됩니다.
+
+---
+
+### Q18. 방식 B 적용 시 Teltonika RUT241 라우터의 최종 역할은?
+* RUT241 라우터는 센서 연산이나 복잡한 파싱을 하지 않고, 오직 무선 LTE 인터넷 공급, NGII 보정 통로 통과, 관제 서버 DB로의 MQTT 텔레메트리 데이터 전송만을 수행하는 **안정적인 무선 데이터 통신 허브(Gateway)** 역할을 수행합니다.
+
+---
+
+### Q19. Septentrio 수신기 단독 위성 수신 테스트 4단계 수칙 (시리얼 포트 판독 및 ROS 2 드라이버 구동 방법)?
+
+* **개요**: RTK 보정 데이터(NTRIP) 입력 전, 수신기 자체가 우주 인공위성 전파 신호를 정상 수신하고 표준 위치 토픽(`/navsat/fix`)을 발행하는지 검증합니다.
+* **상세 테스트 4단계 수칙**:
+  1. **1단계: 시리얼 통신 포트(`/dev/ttyACM*`) 판독 및 권한 확인**:
+     * `ls -l /dev/ttyACM*` 명령어로 수신기 포트 조회.
+     * 모자이크 G5 수신기는 플래싱/제어 포트(`/dev/ttyACM0`)와 실제 NMEA 위치 통신 포트(**`/dev/ttyACM1`**)로 분리 인식되므로 NMEA 통신 포트 경로인 **`/dev/ttyACM1`**을 지정해야 합니다.
+  2. **2단계: ROS 2 Humble 실행 환경 로드 (Prerequisite)**:
+     * `source /opt/ros/humble/setup.bash` 실행하여 `rclpy` 및 ROS 2 메시지 환경 탑재.
+  3. **3단계: 통합 RTK 수신기 드라이버 노드 실행**:
+     * `python3 ~/workspaces/insta360/software/ros2_basics/septentrio_ngii_ntrip_bridge.py` 실행.
+  4. **4단계: 표준 위치 토픽 `/navsat/fix` 단독 3D 측위 수신 검증**:
+     * 새 터미널에서 `ros2 topic echo /navsat/fix` 실행하여 위도, 경도, 고도 수치 및 `status.status: 0` (`STATUS_FIX` / 단독 3D 측위) 수신 확인.
+
+---
+
+### Q20. Septentrio 웹 UI (`http://192.168.3.1`) 접속 시 라우터(`192.168.1.x`) 및 라이다(`169.254.x.x`) 서브넷 충돌 해결 방법은?
+
+* **원인**: 노트북 랜카드가 `192.168.1.x` 라우터 대역만 쥐고 있어 3.x 대역인 수신기 웹서버 접속 패킷을 보낼 길을 찾지 못함.
+* **해결책**: 기본 `eno1` 프로필은 순수 일반용으로 유지하고, 전용 개발 프로필(**`robot_dev`**)을 생성하여 보조 IP 주소(`192.168.3.100/24`)를 추가 등록(IP Subnet Aliasing)함으로써 수동 프로필 교체 없이 라우터 인터넷 + RTK 웹 UI(`192.168.3.1`) + Ouster 라이다(`169.254.129.201`)를 100% 동시에 가동.
+
+> [!NOTE]
+> **전용 개발 프로필 (`robot_dev`) 1줄 생성 명령**:
+> `nmcli connection add type ethernet con-name "robot_dev" ifname eno1 ipv4.method auto +ipv4.addresses "192.168.3.100/24, 169.254.129.100/16" && nmcli connection up "robot_dev"`
+
+---
+
+### Q21. 기본 `eno1` 상태에서도 위성 위치 토픽이 들어오나요? RTK 1cm 고정을 위해 `192.168.3.1`이 필수인 이유는?
+
+> [!IMPORTANT]
+> **위성 토픽 수신 vs RTK 1cm 보정의 네트워크 요구사항 차이 (필수 숙지!)**
+
+1. **단독 3D 측위 (`status.status: 0`, 오차 ~1.5m)**:
+   * USB-C 케이블(시리얼 포트 `/dev/ttyACM1`)을 타고 읽어오는 시리얼 통신이므로, 랜선 프로필이 기본 `eno1`이든 랜선을 뽑아두었든 **USB 케이블만 연결되어 있으면 `/navsat/fix` 위치 토픽은 100% 수신**됩니다.
+2. **RTK 1cm 고정 측위 (`status.status: 2`, 오차 ~1cm)**:
+   * 수신기가 웹 UI(`http://192.168.3.1`)에 저장된 계정으로 국토지리정보원(`rts1.ngii.go.kr`)에 접속하고 LTE 보정 데이터(RTCM3)를 가져오기 위해서는 **`192.168.3.1` 가상 이더넷 통로가 반드시 연결되어 있어야 가동**됩니다.
+
+* **요약**: 단독 측위 토픽 수신은 기본 `eno1`에서도 항상 가능하며, **1cm 센티미터 급 RTK 고정을 사용할 때만 `robot_dev` 프로필을 활성화하여 `192.168.3.1` 가상 이더넷 통로를 열어두면 됩니다.**
+
+---
+
+### Q22. 위치를 옮기지 않았는데 `status.status`가 `0`에서 `2`(`STATUS_GBAS_FIX`)로 승격된 결정적 이유는?
+
+> [!TIP]
+> **수신기 USB 시리얼 포트 RTCM3 입력 디코딩 활성화 세팅 검증 완료!**
+
+* **원인 분석**: Septentrio 수신기의 USB 시리얼 포트(`/dev/ttyACM1`)로 국토지리정보원 RTCM3 보정데이터 바이트가 전달되더라도, 수신기 내부 칩셋이 이를 디코딩하도록 명령(`sdio, USB1, auto, RTCMv3`)이 전송되지 않으면 보정데이터를 무시하고 `status.status: 0` (단독 측위) 상태를 유지합니다.
+* **해결 및 검증**: [`septentrio_ngii_ntrip_bridge.py`](../../../software/ros2_basics/septentrio_ngii_ntrip_bridge.py) 노드 초기화 시 `sdio, USB1, auto, RTCMv3` 명령어를 송신하도록 보완한 직후, 수신기 내부 칩셋이 RTCM3 보정데이터를 즉시 해석하여 **`status.status: 2` (`STATUS_GBAS_FIX` / RTK Fixed)로 실시간 승격**되었습니다.
+
 
 
 

@@ -26,6 +26,8 @@ RUT241은 로봇 온보드 환경에서 자급제 데이터 기기로 동작하�
 
 * 📡 **체결 수신기/센서**: [`Septentrio RTK 수신기`](../gps_rtk/septentrio-mosaic-go-g5-p3h.md)
 * 📹 **관련 비전/라이다 센서**: [`Ouster OS0-128 라이다`](../../vision_sensors/lidar/ouster-os0-128.md), [`Insta360 360도 카메라`](../../vision_sensors/camera/insta360-camera-sdk.md)
+* 🌐 **RTK MQTT DB 연동 브릿지**: [`rtk-mqtt-db-bridge.md`](../../../software/protocol/rtk-mqtt-db-bridge.md)
+* ⏱️ **하드웨어 PPS 동기화 및 Bag 검증**: [`lidar-rtk-pps-sync-bag.md`](../../../software/sensorfusion/lidar-rtk-pps-sync-bag.md)
 * 💻 **관련 센서 융합 모듈**: [`라이다-카메라 동시 녹화 아키텍처`](../../../software/sensorfusion/lidar-insta360-sync-record.md)
 * 📡 **관련 ROS 2 파서 노드**: [`Septentrio NMEA Fix 노드`](../../../software/ros2_basics/septentrio_nmea_fix_node.py)
 
@@ -102,30 +104,64 @@ RUT241은 로봇 온보드 환경에서 자급제 데이터 기기로 동작하�
 
 ---
 
-### Q2. RUT241 라우터에 유심을 꽂은 후 무선 데이터 전송이 정상 작동하는지 어떻게 테스트하나요?
+### Q2. RUT241 라우터 무선 데이터 수신 상태 진단 및 LTE 신호 지표 4가지(RSSI, RSRP, RSRQ, SINR) 정밀 해석 방법은?
 
 * **결론**:
-  * **[1단계] LED 확인 → [2단계] PC/스마트폰 접속 및 속도 측정 → [3단계] WebUI (`192.168.1.1`) 수신 신호(RSRP/SINR) 진단 → [4단계] Ping 패킷 손실 테스트** 4단계를 순서대로 실행합니다.
+  * **[1단계] 전면 LED 확인 ➔ [2단계] Ping 연속 패킷 손실률 테스트 ➔ [3단계] WebUI(`192.168.1.1`) LTE 4대 수신 지표 진단** 3단계를 수행합니다.
 
-* **상세 테스트 4단계 수칙**:
+* **상세 테스트 수칙**:
   1. **1단계: 전면 LED 상태 확인**:
-     * `Power`: 초록색 전원 LED 점등 확인.
-     * `Mobile Network`: `4G/LTE` LED 점등 확인.
-     * `Signal Strength`: 오른쪽 신호 세기 LED 막대가 **2~3개 이상** 점등되어야 안정적입니다.
-  2. **2단계: PC/노트북 연결 및 인터넷/속도 접속 테스트**:
-     * 라우터 LAN 포트에 랜선을 꽂거나 Wi-Fi(`RUT241_xxxx`) 연결 후 [fast.com](https://fast.com) 또는 [naver.com](https://naver.com) 접속을 통해 인터넷 전송을 확인합니다.
-  3. **3단계: 관리자 페이지 WebUI (`192.168.1.1`) 정밀 진단**:
-     * 웹 브라우저에서 `192.168.1.1` 접속 (ID: `admin`, PW: 제품 하단 스티커 값).
-     * **Status > Overview** (또는 **Status > Network > Mobile**) 진단:
-       * **Data connection state**: `Connected` 인지 확인.
-       * **Operator**: 이용 통신사(SKT/KT/LGU+ 등) 이름 확인.
-       * **RSRP (수신 신호 강도)**: `-70 ~ -90 dBm` (매우 양호), `-90 ~ -105 dBm` (보통), `-110 dBm 이하` (신호 약함, 안테나 위치 이동 필요).
-  4. **4단계: 네트워크 핑(Ping) 연속 패킷 테스트**:
-     * 터미널(CMD/Bash)에서 `ping 8.8.8.8 -c 100` 실행하여 패킷 손실률(Packet Loss) 0% 및 지연 시간(Latency) 안정성 검증.
-     * 인터넷 연결이 실패할 경우 WebUI의 **Network > Mobile**에서 **APN 수동 입력** 수행:
-       * SKT: `lte.sktelecom.com`
-       * KT: `internet.ktfwing.com`
-       * LGU+: `internet.lguplus.co.kr`
+     * `Power`: 초록색 점등 / `Mobile Network`: `4G/LTE` 점등 / `Signal Strength`: 오른쪽 막대 **2~3개 이상** 점등.
+  2. **2단계: 네트워크 핑(Ping) 연속 패킷 테스트**:
+     * 터미널에서 `ping 8.8.8.8 -c 5` 실행하여 **패킷 손실률(Packet Loss) 0%** 및 지연 시간(rtt avg ~70ms) 수신 검증.
+  3. **3단계: 관리자 페이지 WebUI (`192.168.1.1`) 4대 수신 지표 정밀 진단**:
+     * **Status > Network > Mobile** 진단:
+       * **`RSSI (-69 dBm / Good)`**: 무선 공간 전체 전파 수신 총합 전력 (양호)
+       * **`RSRP (-96 dBm / Fair)`**: 기지국 참조 신호 순수 수신 세기 (실내/창가에서 보통 수준)
+       * **`RSRQ (-7 dB / Excellent)`**: 신호 수신 품질 (잡음 대비 순수 신호 비율, 최상)
+       * **`SINR (9~17 dB / Good)`**: 신호 대 신호가란(잡음) 간섭비 (양호)
+
+---
+
+### Q3. RSRP 수치가 `-96 dBm` (Fair to Poor)로 나오는데, RTK 보정 데이터 수신에 영향이 없나요?
+
+* **결론**: **전혀 영향이 없으며 100% 안정적으로 동작합니다.**
+* **이유 분석**:
+  1. **RSRQ(-7dB)와 SINR(+9~17dB)의 우수성**: 전파 세기(RSRP)가 보통(-96dBm)이어도 잡음 간섭비(SINR)가 높고 RSRQ가 최상이면 패킷 유실률이 0%로 완벽하게 전송됩니다.
+  2. **RTK 보정 데이터(RTCM3) 필요 용량**: RTK 보정 데이터는 초당 **약 1KB ~ 2KB/sec의 극소 용량**만 사용합니다. 현재 LTE 라우터의 다운로드 속도(10~30Mbps)는 필요 용량의 **10,000배 이상**이므로 매우 안정적입니다.
+
+---
+
+### Q4. 우분투 환경에서 인터넷(RUT241), RTK 수신기(Septentrio), 3D 라이다(Ouster/VLP16), 시놀로지 NAS 네트워크 프로필을 수동 전환 없이 단 1개의 개발 전용 프로필(`robot_dev`)로 통합하는 방법은?
+
+* **개요**: 기본 `eno1` 프로필은 순수 일반용으로 유지하고, 전용 개발 프로필(**`robot_dev`**)을 별도 생성하여 **[DHCP 자동 인터넷 + 3개 보조 IP]**를 동시 바인딩(IP Subnet Aliasing)함으로써 수동 프로필 교체를 완전 제거합니다.
+* **통합 원리**:
+  * **기본 DHCP**: RUT241 라우터 무선 인터넷 자동 수신 (`192.168.1.x`)
+  * **보조 IP 1 (Septentrio RTK용)**: `192.168.3.100/24` (Netmask: `255.255.255.0`)
+  * **보조 IP 2 (3D 라이다용)**: `169.254.129.100/16` (Netmask: `255.255.0.0`)
+  * **보조 IP 3 (시놀로지 NAS용)**: `192.168.x.x/24`
+* **전용 프로필 생성 및 1줄 적용 명령어**:
+  ```bash
+  nmcli connection add type ethernet con-name "robot_dev" ifname eno1 ipv4.method auto +ipv4.addresses "192.168.3.100/24, 169.254.129.100/16" && nmcli connection up "robot_dev"
+  ```
+
+---
+
+### Q5. DHCP(자동 IP)와 넷마스크(Netmask), 센서 고정 IP(Static IP)의 명확한 개념 구별은?
+
+* **DHCP (자동 번호표 발급기)**: 라우터가 랜선을 꽂은 노트북에 외부 인터넷용 IP(`192.168.1.239`)를 자동으로 발급해 주는 시스템.
+* **넷마스크 (Netmask / 울타리 경계선)**: 어디까지가 같은 동네(아파트 단지)인가를 구분하는 울타리. `255.255.255.0`(`/24`)은 앞 3자리 고정, `255.255.0.0`(`/16`)은 앞 2자리 고정.
+* **센서 고정 IP (Static IP)**: 라이다(`169.254.129.201`) 및 RTK 수신기(`192.168.3.1`)는 엣지 PC가 언제 접속하든 통신이 터지지 않도록 고유 고정 신분증을 장비 내부에 영구 보유함.
+* **노트북 랜카드의 통합 동작**: 노트북이 DHCP 인터넷 신분증을 메인으로 쥐고, 추가 등록된 2개 보조 IP 신분증을 손에 쥐어 전 센서와 동시에 대화함.
+
+---
+
+### Q6. RUT241 라라우터의 DHCP IP 주소가 재부팅 시 변경되어도 RTK 수신 및 서버 MQTT 전송에 영향이 없나요?
+
+* **결론**: **전혀 영향을 주지 않으며 100% 정상 가동됩니다.**
+* **이유 분석**:
+  1. **NGII RTK 수신**: 수신기가 외부 국토지리정보원(`rts1.ngii.go.kr`)으로 나가는 아웃바운드(Outbound) 요청이므로 내부 라우터 DHCP IP가 변경되어도 보정데이터 수신은 100% 정상 유지됨.
+  2. **서버 MQTT 전송**: ROS 2 MQTT 브릿지 노드가 목적지 중앙 서버 고정 IP(`100.118.194.54:1883`)로 데이터를 쏘아 올리므로 노트북 내부 DHCP IP 변동에 영향을 받지 않음.
 
 ---
 
