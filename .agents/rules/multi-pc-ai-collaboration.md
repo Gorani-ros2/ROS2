@@ -62,3 +62,8 @@
 
 ### 9. 🔄 다른 AI가 즉시 작업을 이어받을 수 있는 완벽한 연속성 보장 (Seamless Continuation)
 * 작업 종료 시 현재 완료된 상태, 미해결 이슈, 다음 예정 작업(예: Teltonika RUT241 LTE 라우터 유심 도착 후 NTRIP 방법 B 세팅, 라이다 PPS 시간 동기화 결선 등)을 문서에 명확히 남겨, **다른 PC나 다른 AI가 `git pull`을 받아 이 레포지토리를 열었을 때 바로 이전맥락을 이해하고 작업을 이어갈 수 있도록** 구성한다.
+
+### 10. 🔌 Septentrio mosaic-go G5 하드웨어 폼팩터 팩트 메모리 (Hardware Fact Guardrail)
+* **Septentrio mosaic-go G5 평가키트 하드웨어 폼팩터**: 본체에 **물리 RJ45 랜포트가 존재하지 않는다!**
+* **인터페이스 규격**: 오직 **USB-C 포트** (5V 전원 + USB-Ethernet `192.168.3.1` / 시리얼 `/dev/ttyACM1`) 및 JST-GH/10-pin 헤더만 장착되어 있다.
+* **RTK 보정 연동 원리**: 절대로 수신기에 RJ45 랜선을 직결하라고 안내해서는 안 되며, 반드시 노트북/엣지 PC에서 파이썬 ROS 2 브릿지 노드([`septentrio_ngii_ntrip_bridge.py`](../../software/ros2_basics/septentrio_ngii_ntrip_bridge.py))를 구동하여 LTE 인터넷(RUT241)을 통해 받아온 NGII RTCM3 보정 데이터를 USB 시리얼 포트(`/dev/ttyACM1`)로 주입하는 파이프라인만 제안해야 한다.

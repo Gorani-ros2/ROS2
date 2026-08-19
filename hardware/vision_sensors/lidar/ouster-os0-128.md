@@ -11,8 +11,16 @@ Ouster OS0-128은 128채널의 초광각(Super-Wide FOV) 3D 라이다 센서로,
 - **통신 인터페이스**: Ethernet (UDP/TCP)
 - **실시간 Telemetry API**: `http://<sensor_hostname>/api/v1/sensor/telemetry`
 
-## 통신 및 ROS 2 토픽 정의
-- **드라이버 설정**: `my_ouster_params.yaml` (`lidar_mode: "2048x10"`, `timestamp_mode: "TIME_FROM_ROS_TIME"`)
+## 2. 🔗 관련 소프트웨어 및 센서 십자 링크 (Cross-Links)
+* 📡 **체결 GNSS 수신기**: [`Septentrio mosaic-go G5 P3H 수신기`](../../support_sensors/gps_rtk/septentrio-mosaic-go-g5-p3h.md)
+* ⏱️ **하드웨어 PPS 동기화 및 Bag 검증**: [`lidar-rtk-pps-sync-bag.md`](../../../software/sensorfusion/lidar-rtk-pps-sync-bag.md)
+* 📹 **Insta360 360도 카메라**: [`Insta360 카메라 SDK`](../camera/insta360-camera-sdk.md)
+* 📹 **라이다-카메라-GNSS 동기화 녹화**: [`lidar-insta360-sync-record.md`](../../../software/sensorfusion/lidar-insta360-sync-record.md)
+
+---
+
+## 3. 통신 및 ROS 2 토픽 정의
+- **드라이버 설정**: `my_ouster_params.yaml` (`lidar_mode: "2048x10"`, `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"`)
 - **발행 토픽**:
   - `/ouster/points` (`sensor_msgs/msg/PointCloud2`, QoS: **`Best Effort`**)
   - `/ouster/imu` (`sensor_msgs/msg/Imu`)
