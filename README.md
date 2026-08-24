@@ -6,6 +6,14 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 
 ## 📢 최근 핵심 업데이트 내역 (Latest Updates)
 
+### 📌 2026-08-24: 산업용 PoE/RTSP 카메라 폼팩터 비교 및 IP67~68급 자작 하우징 설계 가이드 추가
+- **작업 수행 개발 장비**: `knu desktop` (AI: Claude Code)
+- 완제품형(Bullet/Dome/Block)·분리형(Remote Head)·보드/박스카메라형 세 폼팩터의 대표 제품
+  스펙(RTSP/ONVIF·전력·크기·작동온도·방수등급) 대조표 정리.
+- 보드/박스카메라 채택 시 필요한 3D프린트 IP67~IP68급 자작 하우징 설계 체크리스트(소재·O링
+  실링·광학창·방수 RJ45·압력균등 벤트·컨포멀코팅) 정리.
+- **관련 문서**: [`hardware/vision_sensors/camera/streaming_camera/industrial-poe-rtsp-camera-form-factors.md`](hardware/vision_sensors/camera/streaming_camera/industrial-poe-rtsp-camera-form-factors.md)
+
 ### 📌 2026-08-18: RTK+라우터 NGII 보정, MQTT-DB 서버 연동, 라이다-RTK PPS 동기화 및 ROS2 Bag 유지 검증 (디지털 트윈)
 - **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
 - **핵심 수행 작업 4종**:
