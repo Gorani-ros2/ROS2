@@ -6,18 +6,28 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 
 ## 📢 최근 핵심 업데이트 내역 (Latest Updates)
 
-### 📌 2026-08-24: 산업용 PoE/RTSP 카메라 폼팩터 비교 및 IP67~68급 자작 하우징 설계 가이드 추가
-- **작업 수행 개발 장비**: `knu desktop` (AI: Claude Code)
-- 완제품형(Bullet/Dome/Block)·분리형(Remote Head)·보드/박스카메라형 세 폼팩터의 대표 제품
-  스펙(RTSP/ONVIF·전력·크기·작동온도·방수등급) 대조표 정리.
-- 보드/박스카메라 채택 시 필요한 3D프린트 IP67~IP68급 자작 하우징 설계 체크리스트(소재·O링
-  실링·광학창·방수 RJ45·압력균등 벤트·컨포멀코팅) 정리.
-- **관련 문서**: [`hardware/vision_sensors/camera/streaming_camera/industrial-poe-rtsp-camera-form-factors.md`](hardware/vision_sensors/camera/streaming_camera/industrial-poe-rtsp-camera-form-factors.md)
+### 📌 2026-08-21: Insta360 대용량 추출 멈춤(Freeze) 및 Ctrl+C 데드락 원인 규명, CLI 스크립트(`sync_record.py`) 예외 처리 및 문서화
+- **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
+- **핵심 수행 작업**:
+  1. **Insta360 SDK 대용량 다운로드 멈춤 및 SIGINT 데드락 원인 분석**:
+     - 8K/5.7K 1GB 이상 비디오 파일 USB HTTP 터널 다운로드 중 소켓 쓰기 버퍼 오버플로우(`http_tunnel_client.cpp:0086 write to socket: ...`) 블로킹 현상 원인 규명.
+     - 파이썬 스크립트 `finally` 블록의 `SIGINT` = `SIG_IGN` 설정으로 인해 하위 바이너리가 `Ctrl+C` 무시 상태를 상속받아 멈추는 데드락 원인 파악.
+  2. **`sync_record.py` 스크립트 개선 및 `--no-download` 옵션 추가**:
+     - 다운로드 시 `signal.signal(signal.SIGINT, signal.SIG_DFL)` 복구 및 Ctrl+C 중단 예외 처리 추가.
+     - 대용량 비디오 자동 다운로드를 스킵할 수 있는 `--no-download` 옵션 신설.
+  3. **트러블슈팅 및 긴급 복구 Q&A 문서화**:
+     - `killall -9 insta360_control python3` 강제 종료 명령어 및 SD 카드 직결 전송 가이드 수록.
+  4. **카메라 녹화 중작 실시간 진단 기능 문서화**:
+     - `./run.sh --status` CLI 명령어로 녹화 튕김/과열 셧다운 여부 실시간 조회 수칙 수록.
+- **관련 문서**:
+  * [`software/sensorfusion/lidar-insta360-sync-record.md`](software/sensorfusion/lidar-insta360-sync-record.md) — 동시 제어 스크립트 트러블슈팅 Q&A
+  * [`hardware/vision_sensors/camera/insta360-camera-sdk.md`](hardware/vision_sensors/camera/insta360-camera-sdk.md) — Insta360 SDK 소켓 버퍼 락 Q&A
+  * [`tracking/2026-08-21-environment-audit.md`](tracking/2026-08-21-environment-audit.md) — 2026-08-21 개발 환경 및 Audit 이력 리포트
 
 ### 📌 2026-08-18: RTK+라우터 NGII 보정, MQTT-DB 서버 연동, 라이다-RTK PPS 동기화 및 ROS2 Bag 유지 검증 (디지털 트윈)
 - **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
 - **핵심 수행 작업 4종**:
-  1. **RTK+RUT241 라라우터 국토지리정보원(NGII) NTRIP 연동**: `rts1.ngii.go.kr:2101` (`VRS-RTCM34`, 계정 `<redacted>`) 보정 데이터 수신 및 `sdio, USB1, auto, RTCMv3` 시리얼 주입을 통한 `status.status: 2` (RTK Fixed, 1cm 정밀도) 실시간 융합 승격 실증 및 통합 노드([`septentrio_ngii_ntrip_bridge.py`](software/ros2_basics/septentrio_ngii_ntrip_bridge.py)) 구동 검증.
+  1. **RTK+RUT241 라라우터 국토지리정보원(NGII) NTRIP 연동**: `rts1.ngii.go.kr:2101` (`VRS-RTCM34`, 계정 `gorani`) 보정 데이터 수신 및 `sdio, USB1, auto, RTCMv3` 시리얼 주입을 통한 `status.status: 2` (RTK Fixed, 1cm 정밀도) 실시간 융합 승격 실증 및 통합 노드([`septentrio_ngii_ntrip_bridge.py`](software/ros2_basics/septentrio_ngii_ntrip_bridge.py)) 구동 검증.
   2. **RTK 텔레메트리 MQTT 방식 서버 DB 적재**: ROS 2 `/navsat/fix` 데이터를 JSON 페이로드 규격으로 MQTT 브로커(QoS 1) 발행 및 PostgreSQL / TimescaleDB 공간 테이블 스키마 자동 적재 파이프라인 정립.
   3. **라이다(Ouster OS0-128) & RTK(Septentrio) PPS 하드웨어 동기화**: Septentrio `PPS Out` <-> Ouster `SYNC_PULSE_IN` 물리 결선 및 `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"` 세팅.
   4. **ROS 2 Bag 녹화 및 PPS 동기화 유지 검증**: rosbag 저장 load 환경에서도 라이다-RTK 타임스탬프 드리프트 방지 및 검증 스크립트 작성 (디지털 트윈 3D 라이다+360 RGB 매핑 핵심 기술).

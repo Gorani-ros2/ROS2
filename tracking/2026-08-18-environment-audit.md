@@ -43,7 +43,7 @@
    * **RUT241 라우터 진단**: `ping 8.8.8.8 -c 5` (패킷 손실률 0%, rtt ~70ms) 인터넷 연결 100% 검증.
    * **LTE 신호 4대 지표 정밀 평가**: RSSI (-69dBm Good), RSRP (-96dBm Fair), RSRQ (-7dB Excellent), SINR (9~17dB Good) 해석 수록. RSRP -96dBm 상태에서도 높은 SINR과 RSRQ 덕분에 패킷 유실 0%가 보장되며, RTK 보정데이터 초당 1~2KB 용량 대비 10,000배 이상 충분한 대역폭임을 기술 검증.
    * **Task 1 (NGII NTRIP RTK 1cm Fixed 연동) 100% 실증 완료**:
-     * 국토지리정보원 계정(`<redacted>`)으로 Caster(`rts1.ngii.go.kr:2101`, 마운트포인트 `VRS-RTCM34`) 연동 및 USB 시리얼 Port RTCM3 디코딩 활성화(`sdio, USB1, auto, RTCMv3`)를 통해 **`/navsat/fix` 토픽 `status.status: 2` (`STATUS_GBAS_FIX` / 1cm RTK Fixed) 실시간 융합 승격 실증 마감**.
+     * 국토지리정보원 계정(`gorani:ngii`)으로 Caster(`rts1.ngii.go.kr:2101`, 마운트포인트 `VRS-RTCM34`) 연동 및 USB 시리얼 Port RTCM3 디코딩 활성화(`sdio, USB1, auto, RTCMv3`)를 통해 **`/navsat/fix` 토픽 `status.status: 2` (`STATUS_GBAS_FIX` / 1cm RTK Fixed) 실시간 융합 승격 실증 마감**.
    * **Task 2 (RTK Telemetry MQTT 서버 DB 적재 연동) 100% 실증 완료**:
      * ROS 2 `/navsat/fix` 위치 토픽을 구독하여 1cm 정밀 위도/경도/고도/Covariance/RTK status JSON 페이로드를 생성하고, MQTT 브로커(QoS 1)로 발행하는 파이프라인 노드 [`rtk_mqtt_db_bridge.py`](../software/protocol/rtk_mqtt_db_bridge.py) 및 모의 브로커 스크립트 [`mock_mqtt_broker.py`](../software/protocol/mock_mqtt_broker.py) 연동 실증 마감 (`MQTT Tx -> Lat: 36.1178007, Lon: 128.6320282, Status: STANDALONE_3D_FIX` 100% 정상 수신 실증).
      * PostgreSQL / TimescaleDB 공간 테이블 `robot_rtk_telemetry` 스키마 및 문서화 최신화.
