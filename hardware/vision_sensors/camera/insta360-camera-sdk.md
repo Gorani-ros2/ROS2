@@ -84,3 +84,42 @@ Insta360 카메라는 C++ Camera SDK 기반의 실행 바이너리 및 CLI 래�
   - 360도 비주얼 오도메트리(Omnidirectional Visual Odometry) 및 전방위 서라운드 매핑
   - 3D 라이다 포인트 클라우드(PointCloud2)와의 텍스처 매핑 및 3D 점군-이미지 퓨전
   - 자율주행 기록(rosbag)과 결합된 전방위 비주얼 모니터링
+
+---
+
+## ❓ 자주 묻는 질문 및 실전 기술 Q&A
+
+### Q1. Insta360 파일 다운로드 시 `http_tunnel_client.cpp: write to socket` 메세지가 멈추고 `Ctrl+C`도 차단되는 이유와 대처법은?
+
+**현상 설명**:
+`./run.sh --download` 또는 `sync_record.py` 실행 후 대용량 비디오(1GB 이상) 다운로드 중 `http_tunnel_client.cpp:0086: write to socket: ...` 출력이 1.05GB 부근에서 완전히 멈추고(Freeze), `Ctrl+C`를 입력해도 `[Signal] Interrupted by user (signal 2). Stopping process...`만 지속되며 프로세스가 종료되지 않음.
+
+**원인 분석**:
+1. **USB Bulk Transfer HTTP 소켓 버퍼 락**: Insta360 C++ SDK의 HTTP 터널 클라이언트(`http_tunnel_client.cpp`)는 USB 전송 속도 지연 또는 카메라 SD 카드 읽기 병목 발생 시 소켓 쓰기 버퍼가 꽉 찬 상태(Socket Buffer Overflow)에서 Sync Blocking 상태로 락이 걸립니다.
+2. **SIGINT Ignore 이관 데드락**: 상위 파이썬 스크립트에서 `SIGINT`를 `SIG_IGN`(무시) 설정한 후 다운로드 프로세스를 호출할 경우, `Ctrl+C` 키 입력 시 C++ SDK 신호 포착 로그만 찍히고 시스템 콜 블로킹을 탈출하지 못합니다.
+3. **SDK 내부 300초(5분) 무응답 소켓 타임아웃**: C++ SDK(`HttpTunnelService`) 내부에 300초(5분) 타임아웃 타이머가 내장되어 있어, 소켓 멈춤 시점(`10:41:05`)부터 정확히 5분 후(`10:46:05`)에 `[Download] Download failed!` 및 `HttpTunnelService:: begin close serveice` 로그를 남기고 자동 타임아웃 종료됩니다.
+
+**실전 해결 방안**:
+1. **다른 터미널에서 강제 종료 (Emergency Kill)**:
+   ```bash
+   killall -9 insta360_control python3
+   ```
+2. **`--no-download` 옵션 적용**:
+   대용량 비디오 녹화 시 자동 다운로드를 비활성화하고 카메라 SD 카드 직결 복사 방식을 활용합니다.
+   ```bash
+   python3 sync_record.py --record --res 4K --fps 30 --no-download
+   ```
+
+---
+
+### Q2. 녹화 중간에 카메라가 스스로 멈추는지 진단하는 명령어와 원인은?
+
+**1. 실시간 진단 명령어**:
+```bash
+./run.sh --status
+```
+실행 시 카메라 접속 유무, 배터리 잔량, SD 카드 용량 및 현재 녹화 동작 중 여부(`CaptureCurrentStatus`)를 즉시 출력합니다.
+
+**2. 녹화 중작 주요 원인**:
+- **8K/5.7K 인코딩 과열 셧다운**: DSP 온도가 올라가 카메라가 자동 정지됨. (해결: 4K@30fps 권장)
+- **SD 카드 쓰기 속도 부족**: V30 규격 미달 시 레코딩 튕김. (해결: U3/V30 SD 카드 사용)
