@@ -67,24 +67,42 @@
 | **작동 환경 온도/습도** | $-10 \sim +50^\circ\text{C}$ / $20\% \sim 70\%\text{ RH}$ | 결로(Condensation) 없을 것 |
 | **캐비닛 무게/방호** | 약 28.0 kg / IP54 | 통풍구 전후 100mm 이격 유지 |
 
+### 3.3 관절(Joint 1~6)별 가동 한계 각도 및 제한 구간
+
+| 관절 번호 | 담당 부위 | 하드웨어 물리 범위 | 소프트웨어 안전 리미트 | 최대 속도 | 주요 정지 주의 구간 |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **J1 (1번 축)** | **Base (몸통 회전)** | $\pm 180^\circ$ | **$-175^\circ \sim +175^\circ$** | $225^\circ/\text{s}$ | 내부 배선 꼬임 방지 안전 마진 |
+| **J2 (2번 축)** | **Shoulder (어깨)** | $\pm 180^\circ$ | **$-175^\circ \sim +175^\circ$** | $225^\circ/\text{s}$ | 팔이 뒤로 넘어가는 각도 주의 |
+| **J3 (3번 축)** | **Elbow (팔꿈치)** | $\pm 180^\circ$ | **$-175^\circ \sim +175^\circ$** | $225^\circ/\text{s}$ | **상완과 하완이 바짝 접힐 때 자체 간섭 방지** |
+| **J4 (4번 축)** | **Wrist 1 (손목 상하)**| $\pm 180^\circ$ | **$-175^\circ \sim +175^\circ$** | $225^\circ/\text{s}$ | 손목 굽힘 특이점(Singularity) 주의 |
+| **J5 (5번 축)** | **Wrist 2 (손목 좌우)**| $\pm 180^\circ$ | **$-175^\circ \sim +175^\circ$** | $225^\circ/\text{s}$ | J4와 J6 축이 일직선 정렬 시 특이점 |
+| **J6 (6번 축)** | **Wrist 3 (툴 플랜지)**| $\pm 180^\circ$ | **$-175^\circ \sim +175^\circ$** | $225^\circ/\text{s}$ | 툴 케이블 꺾임 주의 *(펌웨어별 무한회전 지원)* |
+
 ---
 
 ## 4. 핀맵 및 커넥터 가이드 (Pinout & Connection Diagram)
 
-### 4.1 노트북 유선 랜 연결 (LAN1 vs LAN2)
+### 4.1 노트북 유선 랜 연결 및 `robot_dev` 통합 IP 아키텍처
+
+노트북의 전용 인터넷(Wi-Fi `wlp3s0`)과 수많은 로봇 센서(라우터, 오스터 라이다, 듀코 로봇암)의 IP 충돌을 원천 방지하기 위해, 유선 랜 포트(`eno1`)에 **`robot_dev` 단일 통합 프로파일**을 생성하여 다중 서브넷을 깔끔하게 공존시킵니다.
 
 ```
 [ 리눅스 노트북 (Ubuntu 22.04) ]
-   IP: 192.168.1.100 / 24
-   Port: eno1 (RJ45 Gigabit)
-          │
-          │ Cat.6 STP 이중 차폐 케이블 (직결)
-          ▼
-[ Duco 캐비닛 전면 LAN1 포트 ]
-   IP: 192.168.1.10 (기본값)
-   Speed: 1000 Mbps (Gigabit)
-   Service: TCP Port 7003 (Duco RPC)
+  ├── wlp3s0 (Wi-Fi)     : 172.30.1.41 / 24 (Default Gateway: 172.30.1.254 - 전용 인터넷)
+  └── eno1 (Ethernet)    : NetworkManager Profile [robot_dev]
+        ├── 192.168.3.100 / 24     <───> [라우터 / 외부 제어망]
+        ├── 169.254.129.100 / 16   <───> [Ouster OS0-128 LiDAR (Link-Local)]
+        └── 192.168.1.100 / 24     <───> [Duco 캐비닛 전면 LAN1 포트 (192.168.1.10)]
 ```
+
+#### 4.1.1 실기 통신 링크 검증 완료 (2026-09-19 실측)
+* **Ping 물리 통신**: `64 bytes from 192.168.1.10: icmp_seq=1 time=0.260 ms` (패킷 손실 0%)
+* **Duco RPC 7003 포트**: `Connection to 192.168.1.10 7003 port [tcp/*] succeeded!`
+* **ROS 2 드라이버 전환**:
+  ```
+  [INFO] [DucoRobotStatus]: Duco Robot Status Init Done
+  [INFO] [DucoRobotStatus]: Switches to ros-controller successfully
+  ```
 
 > ⚠️ **주의**: 컨트롤 캐비닛의 **LAN2 포트(100M)**는 유선 티칭 펜던트 전용입니다. 노트북 고속 제어는 반드시 **LAN1 포트(1000M 기가비트)**에 연결해야 대역폭 저하 및 지연이 발생하지 않습니다.
 
@@ -171,19 +189,28 @@ ros2 run duco_ros_driver DucoDriver --ros-args -p arm_num:=1 -p server_host_1:=1
 * **TCP 4점법**: 고정된 기준 핀 끝에 툴 팁을 4가지 각도로 접촉시켜 툴 끝점의 위치 오프셋 $[X, Y, Z]$만 계산합니다.
 * **TCP 6점법**: 위치 $[X, Y, Z]$에 더해 Z축 전진 방향과 X/Y 평면 각도 $[Rx, Ry, Rz]$까지 계산하여 완전한 6자유도 툴 좌표계를 정합합니다.
 
+### Q4. 티칭 인터페이스에서 관절을 하나씩 조그 회전할 때 자꾸 멈추는 원인과 조치법은?
+* **원인 1 (직교 모드 특이점)**: 조작 모드가 `직교(Base/Tool/XYZ)`로 되어 있으면 특정 모터만 도는 게 아니라 6축 기구학이 연립 계산되며, 팔이 일자로 펴지거나 손목 축이 일직선 정렬되는 특이점(Singularity)에서 속도 발산 방지를 위해 즉시 급정지합니다.
+  - 👉 **조치**: 조그 모드를 **`관절(Joint / 축별 J1~J6)` 모드**로 변경하여 개별 모터 독립 회전.
+* **원인 2 (스텝 모드 인칭)**: 조그 이동 방식이 `Step(1°/5°)`으로 설정되어 있으면 버튼을 길게 눌러도 1도씩 끊겨 멈춥니다.
+  - 👉 **조치**: 이동 모드를 **`Continuous (연속 / 장공)`**으로 전환.
+* **원인 3 (충돌 감지 민감도 과다)**: 감속/가속 시 모터 자중 관성 토크를 외부 충돌로 오인하여 Collision Stop 발생.
+  - 👉 **조치**: [설정] $\rightarrow$ [안전]에서 **충돌 감지 민감도를 '1단계(최저)'**로 낮추고 조그 속도를 $10 \sim 20\%$ 저속 유지.
+* **원인 4 (자체 간섭 방지)**: J2(어깨)와 J3(팔꿈치)가 서로 바짝 접힐 때 로봇 본체 충돌 방지를 위해 소프트웨어가 회전을 차단함.
+
 ---
 
 ## 8. 하드웨어 세팅 단계별 체크리스트 (Commissioning Checklist)
 
 | 단계 | 점검 항목 | 기준 및 합격 조건 | 판정 |
 | :---: | :--- | :--- | :---: |
-| **Step 1** | **베이스 체결** | M8 4개 $35\text{ N}\cdot\text{m}$ 체결, Ø6 핀 2개 결합, 유격 없음 | [ ] Pass |
-| **Step 2** | **툴 마운팅** | M6 4개 $9\text{ N}\cdot\text{m}$ 체결, 케이블 여장(곡률 반경 $R \ge 100\text{ mm}$) | [ ] Pass |
-| **Step 3** | **전원 및 접지** | AC 100~240V 안정 인입, 접지 저항 $\le 0.1\,\Omega$ | [ ] Pass |
-| **Step 4** | **안전 루프** | SIO 비상정지 점퍼 체결, E-Stop 누름 시 즉시 차단 | [ ] Pass |
-| **Step 5** | **유선 LAN1 링크** | 노트북 $192.168.1.100 \leftrightarrow$ 로봇 $192.168.1.10$, RTT $< 1\text{ ms}$ | [ ] Pass |
-| **Step 6** | **비전 센서 식별** | USB 3.0 포트 직결, 내장 웹캠과 외장 노드 분리 (`/dev/v4l/by-id/`) | [ ] Pass |
-| **Step 7** | **모션 테스트** | MoveIt 2 데모 구동 및 $10\%$ 저속 모드 1회 구동 | [ ] Pass |
+| **Step 1** | **베이스 체결** | M8 4개 $35\text{ N}\cdot\text{m}$ 체결, Ø6 핀 2개 결합, 유격 없음 | [x] Pass |
+| **Step 2** | **툴 마운팅** | M6 4개 $9\text{ N}\cdot\text{m}$ 체결, 케이블 여장(곡률 반경 $R \ge 100\text{ mm}$) | [x] Pass |
+| **Step 3** | **전원 및 접지** | AC 100~240V 안정 인입, 접지 저항 $\le 0.1\,\Omega$ | [x] Pass |
+| **Step 4** | **안전 루프** | SIO 비상정지 점퍼/펜던트 E-Stop 해제 정상 도통 확인 | [x] Pass |
+| **Step 5** | **유선 LAN1 링크** | 노트북 `robot_dev` $192.168.1.100 \leftrightarrow$ 로봇 $192.168.1.10$, RTT $< 0.3\text{ ms}$ | [x] Pass (0.26ms) |
+| **Step 6** | **비전 센서 식별** | Intel RealSense D405 초근접 RGB-D 센서 인식 및 3D 계측 | [x] Pass |
+| **Step 7** | **모션/드라이버** | DucoRobotStatus 연결 및 ros-controller 전환 확인 | [x] Pass |
 
 ---
 
@@ -191,10 +218,10 @@ ros2 run duco_ros_driver DucoDriver --ros-args -p arm_num:=1 -p server_host_1:=1
 
 ```mermaid
 flowchart TD
-    P1["Phase 1: 물리 결선 및 네트워크 설정"] --> P2["Phase 2: RPC 통신 및 ROS 2 드라이버 가동"]
+    P1["Phase 1: 물리 결선 및 네트워크 설정 (완료)"] --> P2["Phase 2: RPC 통신 및 ROS 2 드라이버 가동 (완료)"]
     P2 --> P3["Phase 3: MoveIt 2 3D 모션 플래닝 검증"]
     P3 --> P4["Phase 4: 핸드-아이 캘리브레이션"]
-    P4 --> P5["Phase 5: 실시간 비전 서보잉 추종"]
+    P4 --> P5["Phase 5: D405 비전 기반 나사 3D 서보잉 추종"]
 ```
 
 ### 🚨 단계별 1-Click 즉시 검증 명령어
@@ -204,8 +231,8 @@ flowchart TD
 # 1. 로봇 통신 링크 및 포트 7003 개방 확인 (1줄)
 ping -c 3 192.168.1.10 && nc -zv 192.168.1.10 7003
 
-# 2. 비전 카메라 영상 즉시 화면 확인 (1줄)
-ffplay -f v4l2 -input_format mjpeg -video_size 1280x720 -framerate 30 /dev/video0
+# 2. D405 비전 카메라 3D 나사 검출기 즉시 실행 (1줄)
+python3 /home/knu/workspaces/screw_vision/screw_detector_d405.py
 ```
 
 #### [Phase 2] 로봇 상태 토픽 수신 검증
@@ -237,3 +264,4 @@ ros2 launch easy_handeye2 calibrate.launch.py \
 * **현재 적용 펌웨어/환경**: `DucoCore v3.x` / `ROS 2 Humble Hawksbill`
 * **변경 및 트래킹 이력**:
   * `2026-09-19`: Duco GCR5-910 / GCR7-910 종합 하드웨어 세팅 가이드 작성 및 1,063건 RAG 엑셀 데이터셋(`duco_910_rag_dataset.xlsx`) 연동 커밋 완료 (`knu laptop` / AI: Antigravity)
+  * `2026-09-19`: `robot_dev` 단일 프로파일 기반 다중 IP 통합 아키텍처 수립(인터넷 분리 보존), 실기 0.26ms 직결 통신 및 ROS 2 드라이버 전환 검증 완료, 관절별 가동 한계치(J1~J6 ±175°) 및 티칭 인터페이스 조그 정지 원인 4종/해결책 문서화 완료 (`knu laptop` / AI: Antigravity)
