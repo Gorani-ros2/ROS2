@@ -647,7 +647,7 @@ def run_vision_loop(headless=False):
             # 1. Background Pad / Inspection Zone Detection
             pad_canvas = None
             if auto_roi and black_mode:
-                pad_mask = (blurred > 70).astype(np.uint8) * 255
+                pad_mask = (blurred > 100).astype(np.uint8) * 255
                 pad_cnts, _ = cv2.findContours(pad_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if pad_cnts:
                     c_foam = max(pad_cnts, key=cv2.contourArea)
@@ -655,8 +655,8 @@ def run_vision_loop(headless=False):
                     if foam_area > 0.08 * h * w:
                         pad_canvas = np.zeros_like(gray)
                         cv2.drawContours(pad_canvas, [c_foam], -1, 255, -1)
-                        # Erode 15px to eliminate edge noise
-                        pad_eroded = cv2.erode(pad_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
+                        # Erode 25px to strictly eliminate edge noise and table boundary bleed
+                        pad_eroded = cv2.erode(pad_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25)))
                         screw_mask = np.zeros_like(gray)
                         screw_mask[(blurred < thresh_val) & (pad_eroded > 0)] = 255
                     else:
@@ -868,15 +868,15 @@ def run_vision_loop(headless=False):
                 cls_name = None
                 color = (0, 165, 255) # Orange
 
-                if head_dia_mm > 9.0 or head_dia_mm < 5.8 or tot_l_mm > 38.0 or tot_l_mm < 8.0:
+                if head_dia_mm > 10.0 or head_dia_mm < 5.5 or tot_l_mm > 35.0 or tot_l_mm < 10.0:
                     continue
 
-                if ar < 1.35:
-                    if 6.3 <= head_dia_mm <= 8.8:
+                if ar < 1.4:
+                    if 6.0 <= head_dia_mm <= 9.2:
                         cls_name = "M4 Head"
                         m4_count += 1
                 else:
-                    if (3.5 <= shank_dia_mm <= 4.8) or (6.3 <= head_dia_mm <= 8.8):
+                    if (3.2 <= shank_dia_mm <= 5.2) or (6.0 <= head_dia_mm <= 9.5):
                         cls_name = f"M4 Screw (L={tot_l_mm:.0f}mm)"
                         m4_count += 1
 
@@ -932,7 +932,8 @@ def run_vision_loop(headless=False):
             if gui_enabled:
                 cv2.imshow("Intel RealSense D405 - Screw Inspector", vis)
                 key = cv2.waitKey(1) & 0xFF
-                if key == ord('q') or key == 27:
+                if key == ord('q'):
+                    print(f"[INFO] Exit requested via key 'q'")
                     state.running = False
                     break
                 elif key == ord('c'):
