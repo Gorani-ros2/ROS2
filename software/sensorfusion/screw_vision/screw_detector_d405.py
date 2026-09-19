@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Intel RealSense D405: M3 / M4 Precision Screw 3D Detector & Web Telemetry Hub
+Intel RealSense D405: M4 Dedicated Precision Screw 3D Detector & Web Telemetry Hub
 - Method 1: Zero-Shot Sub-millimeter Geometric Measurement & 3D Pose Estimation.
 - Tilt & Distortion Calibration Engine:
   1. Lens Radial Distortion Correction (Inverse Brown-Conrady).
@@ -46,7 +46,6 @@ class VisionState:
         self.current_frame = None
         self.current_mask = None
         self.fps = 0.0
-        self.m3_count = 0
         self.m4_count = 0
         self.avg_depth_mm = 0.0
         self.detections = []
@@ -276,14 +275,10 @@ HTML_TEMPLATE = """
         <div class="badge-live">D405 ACTIVE</div>
     </div>
 
-    <!-- Live Telemetry Stat Cards -->
+    <!-- Live Telemetry Stat Cards (M4 Dedicated) -->
     <div class="grid-stats">
         <div class="stat-card">
-            <div class="stat-label">M3 Screws (Green)</div>
-            <div class="stat-val m3" id="stat-m3">0</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">M4 Screws (Orange)</div>
+            <div class="stat-label">Detected M4 Screws (Orange)</div>
             <div class="stat-val m4" id="stat-m4">0</div>
         </div>
         <div class="stat-card">
@@ -427,7 +422,6 @@ HTML_TEMPLATE = """
             fetch('/api/status')
                 .then(r => r.json())
                 .then(d => {
-                    document.getElementById('stat-m3').innerText = d.m3_count;
                     document.getElementById('stat-m4').innerText = d.m4_count;
                     document.getElementById('stat-depth').innerText = d.avg_depth_mm.toFixed(1) + ' mm';
                     document.getElementById('stat-tilt').innerText = d.pitch_deg.toFixed(1) + '° / ' + d.roll_deg.toFixed(1) + '°';
@@ -439,7 +433,7 @@ HTML_TEMPLATE = """
                     } else {
                         let html = '';
                         d.detections.forEach((item, idx) => {
-                            const badge = item.class.includes('M3') ? 'badge-m3' : (item.class.includes('M4') ? 'badge-m4' : 'badge-gray');
+                            const badge = 'badge-m4';
                             html += `<tr>
                                 <td>${idx + 1}</td>
                                 <td class="${badge}">${item.class}</td>
@@ -500,7 +494,6 @@ def api_status():
     with state.lock:
         return jsonify({
             "fps": state.fps,
-            "m3_count": state.m3_count,
             "m4_count": state.m4_count,
             "avg_depth_mm": state.avg_depth_mm,
             "pitch_deg": state.pitch_deg,
@@ -754,7 +747,6 @@ def run_vision_loop(headless=False):
 
             vis = color_image.copy()
             detected_items = []
-            m3_count = 0
             m4_count = 0
             all_z = []
 
@@ -799,9 +791,9 @@ def run_vision_loop(headless=False):
 
                 z_mm = z_m * 1000.0
 
-                # Physical Area Filter in mm^2 (reject noise < 20mm^2 and holes > 130mm^2)
+                # Physical Area Filter in mm^2 (M4 screw area ~40..90 mm^2; reject nuts/noise < 35mm^2 and holes > 130mm^2)
                 area_mm2 = area * ((z_mm / fx) ** 2)
-                if area_mm2 < 20.0 or area_mm2 > 130.0:
+                if area_mm2 < 35.0 or area_mm2 > 130.0:
                     continue
 
                 all_z.append(z_mm)
@@ -855,30 +847,21 @@ def run_vision_loop(headless=False):
                     head_dia_mm = tot_w_mm
                     shank_dia_mm = tot_w_mm
 
-                # Classification Rules (ISO 4762 / DIN 912 Standard)
+                # Classification Rules (Strict M4 Socket Head Cap Screw Only)
+                # M4 DIN 912 Standard: Head D = 6.3 ~ 8.8 mm, Shank d = 3.5 ~ 4.8 mm, Length = 12 ~ 35 mm
                 cls_name = None
-                color = (200, 200, 200)
+                color = (0, 165, 255) # Orange
 
-                if head_dia_mm > 9.0 or tot_l_mm > 42.0 or tot_l_mm < 6.0:
+                if head_dia_mm > 9.0 or head_dia_mm < 5.8 or tot_l_mm > 38.0 or tot_l_mm < 8.0:
                     continue
 
                 if ar < 1.35:
-                    if 4.8 <= head_dia_mm <= 6.2:
-                        cls_name = "M3 Head"
-                        color = (0, 255, 0)
-                        m3_count += 1
-                    elif 6.3 <= head_dia_mm <= 8.8:
+                    if 6.3 <= head_dia_mm <= 8.8:
                         cls_name = "M4 Head"
-                        color = (0, 165, 255)
                         m4_count += 1
                 else:
-                    if (2.4 <= shank_dia_mm <= 3.5) or (head_dia_mm <= 6.2 and shank_dia_mm < 3.6):
-                        cls_name = f"M3 Screw (L={tot_l_mm:.0f}mm)"
-                        color = (0, 255, 0)
-                        m3_count += 1
-                    elif (3.6 <= shank_dia_mm <= 4.8) or (6.3 <= head_dia_mm <= 8.8):
+                    if (3.5 <= shank_dia_mm <= 4.8) or (6.3 <= head_dia_mm <= 8.8):
                         cls_name = f"M4 Screw (L={tot_l_mm:.0f}mm)"
-                        color = (0, 165, 255)
                         m4_count += 1
 
                 if cls_name:
@@ -915,7 +898,7 @@ def run_vision_loop(headless=False):
             mode_lbl = "BLACK SCREW (White BG)" if black_mode else "SILVER SCREW (Dark BG)"
             cv2.putText(vis, f"D405 Calibrated Inspector | FPS: {fps:.1f} | Mode: {mode_lbl} | Tilt: P={cur_pitch:+.1f}° R={cur_roll:+.1f}°", 
                         (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-            cv2.putText(vis, f"Detected: M3 = {m3_count} | M4 = {m4_count} | Z_avg: {avg_z:.1f}mm | Table Leveled: {'YES' if is_calib else 'PENDING'}", 
+            cv2.putText(vis, f"Detected M4: {m4_count} pcs | Z_avg: {avg_z:.1f}mm | Table Leveled: {'YES' if is_calib else 'PENDING'}", 
                         (15, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 255), 2)
             cv2.putText(vis, "[Web: http://localhost:5000] | [C] Calib Plane | [B] Mode | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
                         (15, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
@@ -925,7 +908,6 @@ def run_vision_loop(headless=False):
                 state.current_frame = vis
                 state.current_mask = screw_mask
                 state.fps = fps
-                state.m3_count = m3_count
                 state.m4_count = m4_count
                 state.avg_depth_mm = avg_z
                 state.detections = detected_items
@@ -974,7 +956,7 @@ def main():
     args = parser.parse_args()
 
     print("==================================================================")
-    print("   Intel RealSense D405: M3 / M4 Screw 3D Precision Detector")
+    print("   Intel RealSense D405: M4 Dedicated Screw 3D Precision Detector")
     print("   Method 1: Zero-Shot Geometric Measurement & Plane Leveling")
     print("==================================================================")
     print(f"👉 1-Click Verification Web Viewer: http://localhost:{args.port}")
