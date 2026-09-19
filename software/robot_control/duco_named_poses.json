@@ -1,0 +1,44 @@
+{
+  "folded_home": {
+    "joints_deg": [
+      0.0,
+      -10.0,
+      -110.0,
+      30.0,
+      90.0,
+      0.0
+    ],
+    "description": "Safe, compact folded standby pose (low center of gravity, non-singular, downward tool)"
+  },
+  "candle_home": {
+    "joints_deg": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "description": "MoveIt standard zero position (straight up)"
+  },
+  "m4_view": {
+    "joints_deg": [
+      9.4635,
+      2.424,
+      -108.4305,
+      16.1891,
+      89.9459,
+      2.2113
+    ],
+    "tcp_mm_deg": [
+      -476.4439,
+      63.7812,
+      333.8925,
+      179.9999,
+      -0.0005,
+      97.3473
+    ],
+    "description": "Standard M4 screw inspection pose at ~30cm height, 0° perpendicular tilt",
+    "timestamp": 1789805617.1881785
+  }
+}
