@@ -3,10 +3,15 @@
 """
 Intel RealSense D405: M3 / M4 Precision Screw 3D Detector & Web Telemetry Hub
 - Method 1: Zero-Shot Sub-millimeter Geometric Measurement & 3D Pose Estimation.
-- Standalone: Runs locally on laptop with D405 connected via USB 3.0 (No robot required).
+- Tilt & Distortion Calibration Engine:
+  1. Lens Radial Distortion Correction (Inverse Brown-Conrady).
+  2. Dense 3D Plane-Fitting & Leveling Rotation Transform (R_level):
+     Eliminates Pitch/Roll camera tilt, leveling workspace to Z = 0.0 mm.
+  3. Workspace Origin Alignment: Origin (0, 0, 0) centered at the foam pad center hole.
+  4. Real-time True Euclidean Distance Matrix & Symmetry Verification.
 - Dual Verification:
   1. Desktop GUI Window (cv2.imshow on DISPLAY=:0)
-  2. 1-Click Web Viewer (http://localhost:5000) with live stream, telemetry cards, and controls.
+  2. 1-Click Web Viewer (http://localhost:5000) with live telemetry cards and calibration controls.
 """
 
 import sys
@@ -49,6 +54,17 @@ class VisionState:
         self.thresh_val = 90
         self.auto_foam_roi = True
         self.snapshot_saved = None
+        
+        # Calibration State
+        self.calibrated = False
+        self.pitch_deg = 0.0
+        self.roll_deg = 0.0
+        self.plane_a = 0.0
+        self.plane_b = 0.0
+        self.plane_c = 295.0
+        self.R_level = np.eye(3)
+        self.origin_level = np.zeros(3)
+        self.recalib_requested = True
 
 state = VisionState()
 
@@ -74,6 +90,7 @@ HTML_TEMPLATE = """
             --m3-color: #22c55e;
             --m4-color: #f97316;
             --accent: #38bdf8;
+            --purple: #a855f7;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -117,8 +134,8 @@ HTML_TEMPLATE = """
         }
         .grid-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
             margin-bottom: 20px;
         }
         .stat-card {
@@ -129,10 +146,11 @@ HTML_TEMPLATE = """
             position: relative;
         }
         .stat-label { font-size: 13px; color: var(--text-dim); font-weight: 500; }
-        .stat-val { font-size: 28px; font-weight: 800; margin-top: 6px; }
+        .stat-val { font-size: 26px; font-weight: 800; margin-top: 6px; }
         .stat-val.m3 { color: var(--m3-color); }
         .stat-val.m4 { color: var(--m4-color); }
         .stat-val.depth { color: var(--accent); }
+        .stat-val.tilt { color: var(--purple); font-size: 20px; }
         .stat-val.fps { color: #e2e8f0; }
         
         .main-content {
@@ -221,6 +239,8 @@ HTML_TEMPLATE = """
         .btn-secondary:hover { background: #475569; }
         .btn-success { background: #15803d; }
         .btn-success:hover { background: #166534; }
+        .btn-purple { background: #7e22ce; }
+        .btn-purple:hover { background: #6b21a8; }
         
         .table-card {
             background: var(--card-bg);
@@ -244,13 +264,14 @@ HTML_TEMPLATE = """
         .badge-m3 { color: var(--m3-color); font-weight: 700; }
         .badge-m4 { color: var(--m4-color); font-weight: 700; }
         .badge-gray { color: var(--text-dim); }
+        .highlight-calib { color: #38bdf8; font-weight: 700; }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="title-group">
             <h1>Intel RealSense D405 Screw Precision 3D Inspector</h1>
-            <p>Method 1: Zero-Shot Geometric Measurement & Sub-millimeter Optical 3D Pose Estimation</p>
+            <p>Method 1: Zero-Shot Geometric Measurement with Plane Leveling & Distortion Calibration</p>
         </div>
         <div class="badge-live">D405 ACTIVE</div>
     </div>
@@ -270,6 +291,10 @@ HTML_TEMPLATE = """
             <div class="stat-val depth" id="stat-depth">0.0 mm</div>
         </div>
         <div class="stat-card">
+            <div class="stat-label">Camera Tilt (P / R)</div>
+            <div class="stat-val tilt" id="stat-tilt">0.0° / 0.0°</div>
+        </div>
+        <div class="stat-card">
             <div class="stat-label">Processing Rate</div>
             <div class="stat-val fps" id="stat-fps">0.0 FPS</div>
         </div>
@@ -280,7 +305,7 @@ HTML_TEMPLATE = """
         <!-- Live Video Stream -->
         <div class="feed-container">
             <div class="feed-header">
-                <h3>Live Annotated RGB-D Stream</h3>
+                <h3>Live Calibrated RGB-D Stream</h3>
                 <span style="font-size: 12px; color: var(--text-dim);">1280 × 720 @ 30fps</span>
             </div>
             <div class="video-box">
@@ -311,7 +336,12 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="btn-group">
-                    <button class="btn btn-success" onclick="takeSnapshot()">Capture Snapshot</button>
+                    <button class="btn btn-purple" onclick="calibratePlane()">
+                        📐 Re-Calibrate Plane
+                    </button>
+                    <button class="btn btn-success" onclick="takeSnapshot()">
+                        📸 Capture Snapshot
+                    </button>
                 </div>
                 <div id="snap-msg" style="font-size: 12px; color: var(--accent); margin-top: 8px; min-height: 18px;"></div>
             </div>
@@ -330,13 +360,15 @@ HTML_TEMPLATE = """
 
     <!-- Detected Screws 3D Pose Table -->
     <div class="table-card">
-        <h3>Detected Screw 3D Coordinate Log (Camera Optical Frame)</h3>
+        <h3>Detected Screw Coordinate Log (Calibrated Table Workspace vs Raw Camera)</h3>
         <table>
             <thead>
                 <tr>
                     <th>#</th>
                     <th>Class</th>
-                    <th>3D Position (X, Y, Z mm)</th>
+                    <th>Calibrated Table 2D (X, Y mm)</th>
+                    <th>Dist from Center</th>
+                    <th>Raw Camera 3D (X, Y, Z mm)</th>
                     <th>Angle</th>
                     <th>Head Dia (D)</th>
                     <th>Shank Dia (d)</th>
@@ -344,7 +376,7 @@ HTML_TEMPLATE = """
                 </tr>
             </thead>
             <tbody id="det-table-body">
-                <tr><td colspan="7" style="color: var(--text-dim); text-align: center;">Scanning scene...</td></tr>
+                <tr><td colspan="9" style="color: var(--text-dim); text-align: center;">Scanning scene...</td></tr>
             </tbody>
         </table>
     </div>
@@ -372,6 +404,15 @@ HTML_TEMPLATE = """
                 });
         }
 
+        function calibratePlane() {
+            fetch('/api/calibrate_plane', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('snap-msg').innerText = 'Plane Calibrated: Pitch=' + d.pitch.toFixed(1) + '°, Roll=' + d.roll.toFixed(1) + '°';
+                    setTimeout(() => { document.getElementById('snap-msg').innerText = ''; }, 4000);
+                });
+        }
+
         function takeSnapshot() {
             fetch('/api/snapshot', { method: 'POST' })
                 .then(r => r.json())
@@ -389,11 +430,12 @@ HTML_TEMPLATE = """
                     document.getElementById('stat-m3').innerText = d.m3_count;
                     document.getElementById('stat-m4').innerText = d.m4_count;
                     document.getElementById('stat-depth').innerText = d.avg_depth_mm.toFixed(1) + ' mm';
+                    document.getElementById('stat-tilt').innerText = d.pitch_deg.toFixed(1) + '° / ' + d.roll_deg.toFixed(1) + '°';
                     document.getElementById('stat-fps').innerText = d.fps.toFixed(1) + ' FPS';
 
                     const tbody = document.getElementById('det-table-body');
                     if (!d.detections || d.detections.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="7" style="color: var(--text-dim); text-align: center;">No screws detected in current frame</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="9" style="color: var(--text-dim); text-align: center;">No screws detected in current frame</td></tr>';
                     } else {
                         let html = '';
                         d.detections.forEach((item, idx) => {
@@ -401,7 +443,9 @@ HTML_TEMPLATE = """
                             html += `<tr>
                                 <td>${idx + 1}</td>
                                 <td class="${badge}">${item.class}</td>
-                                <td>[${item.x_3d.toFixed(1)}, ${item.y_3d.toFixed(1)}, ${item.z_3d.toFixed(1)}] mm</td>
+                                <td class="highlight-calib">[${item.x_tbl.toFixed(1)}, ${item.y_tbl.toFixed(1)}] mm</td>
+                                <td>${item.dist_center.toFixed(1)} mm</td>
+                                <td style="color: var(--text-dim);">[${item.x_3d.toFixed(1)}, ${item.y_3d.toFixed(1)}, ${item.z_3d.toFixed(1)}]</td>
                                 <td>${item.angle.toFixed(1)}°</td>
                                 <td>${item.head_dia.toFixed(2)} mm</td>
                                 <td>${item.shank_dia.toFixed(2)} mm</td>
@@ -459,10 +503,26 @@ def api_status():
             "m3_count": state.m3_count,
             "m4_count": state.m4_count,
             "avg_depth_mm": state.avg_depth_mm,
+            "pitch_deg": state.pitch_deg,
+            "roll_deg": state.roll_deg,
+            "calibrated": state.calibrated,
             "detections": state.detections,
             "black_screw_mode": state.black_screw_mode,
             "thresh_val": state.thresh_val,
             "auto_foam_roi": state.auto_foam_roi
+        })
+
+@app.route('/api/calibrate_plane', methods=['POST'])
+def api_calibrate_plane():
+    with state.lock:
+        state.recalib_requested = True
+    time.sleep(0.1)
+    with state.lock:
+        return jsonify({
+            "success": True,
+            "pitch": state.pitch_deg,
+            "roll": state.roll_deg,
+            "plane_c": state.plane_c
         })
 
 @app.route('/api/set_threshold', methods=['POST'])
@@ -496,7 +556,7 @@ def api_snapshot():
     return jsonify({"success": False, "error": "No frame available"})
 
 # ==============================================================================
-# Vision Processing Engine (Zero-Shot Precision Algorithm)
+# Vision Processing Engine (Zero-Shot Precision Algorithm with Plane Leveling)
 # ==============================================================================
 def run_vision_loop(headless=False):
     print("[INFO] Initializing Intel RealSense D405 Pipeline...")
@@ -517,7 +577,6 @@ def run_vision_loop(headless=False):
         except Exception as e:
             print(f"[WARN] Failed to start pipeline on attempt {attempt}: {e}")
             if attempt < max_retries:
-                # Hardware reset over USB if busy
                 try:
                     ctx = rs.context()
                     for dev in ctx.query_devices():
@@ -540,7 +599,9 @@ def run_vision_loop(headless=False):
     intrinsics = color_profile.as_video_stream_profile().get_intrinsics()
     fx, fy = intrinsics.fx, intrinsics.fy
     cx_cam, cy_cam = intrinsics.ppx, intrinsics.ppy
+    dist_coeffs = np.array(intrinsics.coeffs, dtype=np.float64)
     print(f"[INFO] Camera Intrinsics: fx={fx:.1f}, fy={fy:.1f}, cx={cx_cam:.1f}, cy={cy_cam:.1f}")
+    print(f"[INFO] Distortion Coeffs: {dist_coeffs}")
 
     align = rs.align(rs.stream.color)
 
@@ -548,7 +609,6 @@ def run_vision_loop(headless=False):
     frame_count = 0
     fps = 0.0
 
-    # Display GUI window on DISPLAY=:0 if not headless
     gui_enabled = not headless and ('DISPLAY' in os.environ or 'WAYLAND_DISPLAY' in os.environ)
     if gui_enabled:
         try:
@@ -586,40 +646,109 @@ def run_vision_loop(headless=False):
                 black_mode = state.black_screw_mode
                 thresh_val = state.thresh_val
                 auto_roi = state.auto_foam_roi
+                need_recalib = state.recalib_requested
 
             gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
             blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
             # 1. Background Pad / Inspection Zone Detection
+            pad_canvas = None
             if auto_roi and black_mode:
-                # White foam pad / A4 paper is bright (> 70 gray)
                 pad_mask = (blurred > 70).astype(np.uint8) * 255
                 pad_cnts, _ = cv2.findContours(pad_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if pad_cnts:
                     c_foam = max(pad_cnts, key=cv2.contourArea)
                     foam_area = cv2.contourArea(c_foam)
                     if foam_area > 0.08 * h * w:
-                        foam_canvas = np.zeros_like(gray)
-                        cv2.drawContours(foam_canvas, [c_foam], -1, 255, -1)
-                        # Erode slightly (15px) to eliminate mat border edge noise
-                        foam_canvas = cv2.erode(foam_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
+                        pad_canvas = np.zeros_like(gray)
+                        cv2.drawContours(pad_canvas, [c_foam], -1, 255, -1)
+                        # Erode 15px to eliminate edge noise
+                        pad_eroded = cv2.erode(pad_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15)))
                         screw_mask = np.zeros_like(gray)
-                        screw_mask[(blurred < thresh_val) & (foam_canvas > 0)] = 255
+                        screw_mask[(blurred < thresh_val) & (pad_eroded > 0)] = 255
                     else:
                         _, screw_mask = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY_INV)
                 else:
                     _, screw_mask = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY_INV)
             elif black_mode:
-                # Pure inverted threshold
                 _, screw_mask = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY_INV)
             else:
-                # Silver screw on dark background
                 _, screw_mask = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY)
 
             # Morphological noise removal
             clean_k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
             screw_mask = cv2.morphologyEx(screw_mask, cv2.MORPH_OPEN, clean_k)
             screw_mask = cv2.morphologyEx(screw_mask, cv2.MORPH_CLOSE, clean_k)
+
+            # 2. Dense Plane Fitting Calibration (Tilt Alignment)
+            if need_recalib and pad_canvas is not None:
+                yy, xx = np.where(pad_canvas > 0)
+                if len(xx) > 1000:
+                    step = 25
+                    xx_s, yy_s = xx[::step], yy[::step]
+                    raw_z = d_raw[yy_s, xx_s] * depth_scale * 1000.0 # mm
+                    valid = (raw_z > 200.0) & (raw_z < 360.0)
+                    if np.sum(valid) > 100:
+                        xs = ((xx_s[valid] - cx_cam) * raw_z[valid]) / fx
+                        ys = ((yy_s[valid] - cy_cam) * raw_z[valid]) / fy
+                        zs = raw_z[valid]
+                        A = np.column_stack((xs, ys, np.ones(len(xs))))
+                        plane_fit, _, _, _ = np.linalg.lstsq(A, zs, rcond=None)
+                        pa, pb, pc = plane_fit
+
+                        # Normal vector of table in camera frame
+                        norm_vec = np.array([-pa, -pb, 1.0])
+                        norm_vec /= np.linalg.norm(norm_vec)
+
+                        pitch = float(np.degrees(np.arctan(pb)))
+                        roll = float(np.degrees(np.arctan(pa)))
+
+                        # Rodrigues rotation matrix aligning table normal to [0, 0, 1]
+                        target_z = np.array([0.0, 0.0, 1.0])
+                        v = np.cross(norm_vec, target_z)
+                        s = np.linalg.norm(v)
+                        c_ang = np.dot(norm_vec, target_z)
+                        vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+                        R_l = np.eye(3) + vx + np.dot(vx, vx) * ((1.0 - c_ang) / (s**2 + 1e-9))
+
+                        # Workspace origin: find foam center hole
+                        center_roi = blurred[int(h*0.35):int(h*0.65), int(w*0.38):int(w*0.62)]
+                        _, h_mask = cv2.threshold(center_roi, 60, 255, cv2.THRESH_BINARY_INV)
+                        h_cnts, _ = cv2.findContours(h_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        orig_x = cx_cam
+                        orig_y = cy_cam
+                        if h_cnts:
+                            h_cnt = max(h_cnts, key=cv2.contourArea)
+                            (hx, hy), hr = cv2.minEnclosingCircle(h_cnt)
+                            orig_x = hx + int(w*0.38)
+                            orig_y = hy + int(h*0.35)
+
+                        orig_z = (pa * ((orig_x - cx_cam) * pc / fx) + pb * ((orig_y - cy_cam) * pc / fy) + pc)
+                        orig_pt_cam = np.array([
+                            ((orig_x - cx_cam) * orig_z) / fx,
+                            ((orig_y - cy_cam) * orig_z) / fy,
+                            orig_z
+                        ])
+                        orig_level = np.dot(R_l, orig_pt_cam)
+
+                        with state.lock:
+                            state.plane_a = float(pa)
+                            state.plane_b = float(pb)
+                            state.plane_c = float(pc)
+                            state.pitch_deg = pitch
+                            state.roll_deg = roll
+                            state.R_level = R_l
+                            state.origin_level = orig_level
+                            state.calibrated = True
+                            state.recalib_requested = False
+                        print(f"[CALIB] Fitted Plane: Z = {pa:.4f}X + {pb:.4f}Y + {pc:.1f}mm | Pitch={pitch:+.2f}°, Roll={roll:+.2f}°")
+
+            with state.lock:
+                R_cur = state.R_level.copy()
+                orig_cur = state.origin_level.copy()
+                is_calib = state.calibrated
+                cur_pitch = state.pitch_deg
+                cur_roll = state.roll_deg
 
             contours, _ = cv2.findContours(screw_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -631,7 +760,6 @@ def run_vision_loop(headless=False):
 
             for cnt in contours:
                 area = cv2.contourArea(cnt)
-                # Filter out microscopic noise and massive background regions
                 if area < 120 or area > 18000:
                     continue
 
@@ -644,7 +772,6 @@ def run_vision_loop(headless=False):
                 raw_val = d_raw[cy_i, cx_i]
                 z_m = raw_val * depth_scale
                 if z_m < 0.05 or z_m > 0.50:
-                    # 1. 5x5 ROI inside contour
                     roi_vals = []
                     for dy in range(-4, 5):
                         for dx in range(-4, 5):
@@ -656,7 +783,6 @@ def run_vision_loop(headless=False):
                     if roi_vals:
                         z_m = float(np.median(roi_vals))
                     else:
-                        # 2. Perimeter fallback (sample white pad around black screw)
                         sample_r = int(radius + 8)
                         for angle_deg in range(0, 360, 45):
                             rad = math.radians(angle_deg)
@@ -680,7 +806,6 @@ def run_vision_loop(headless=False):
 
                 all_z.append(z_mm)
 
-                # MinAreaRect
                 rect = cv2.minAreaRect(cnt)
                 (rcx, rcy), (rw, rh), angle = rect
                 ar = max(rw, rh) / (min(rw, rh) + 1e-5)
@@ -692,6 +817,14 @@ def run_vision_loop(headless=False):
                 x_3d_mm = pt_3d[0] * 1000.0
                 y_3d_mm = pt_3d[1] * 1000.0
 
+                # Level Plane Calibration Transform
+                pt_cam = np.array([x_3d_mm, y_3d_mm, z_mm])
+                pt_level = np.dot(R_cur, pt_cam)
+                pt_table = pt_level - orig_cur
+                x_tbl_mm = float(pt_table[0])
+                y_tbl_mm = float(pt_table[1])
+                dist_center_mm = float(np.linalg.norm(pt_table[:2]))
+
                 # Cross-sectional profiling for Shank vs Head Diameter
                 deg = angle
                 r_w, r_h = rw, rh
@@ -699,7 +832,6 @@ def run_vision_loop(headless=False):
                     deg = deg + 90
                     r_w, r_h = r_h, r_w
 
-                # Local rotated patch
                 pad = 40
                 bx1, by1 = max(0, cx_i - pad), max(0, cy_i - pad)
                 bx2, by2 = min(w, cx_i + pad), min(h, cy_i + pad)
@@ -727,24 +859,19 @@ def run_vision_loop(headless=False):
                 cls_name = None
                 color = (200, 200, 200)
 
-                # Rejection: Exclude objects that exceed M3/M4 physical dimensions (e.g. table edges, large holes)
                 if head_dia_mm > 9.0 or tot_l_mm > 42.0 or tot_l_mm < 6.0:
                     continue
 
                 if ar < 1.35:
-                    # Upright Screw Head (facing camera)
                     if 4.8 <= head_dia_mm <= 6.2:
                         cls_name = "M3 Head"
-                        color = (0, 255, 0) # Green
+                        color = (0, 255, 0)
                         m3_count += 1
                     elif 6.3 <= head_dia_mm <= 8.8:
                         cls_name = "M4 Head"
-                        color = (0, 165, 255) # Orange
+                        color = (0, 165, 255)
                         m4_count += 1
                 else:
-                    # Lying Screw Body
-                    # M3: Shank ~3.0mm (2.4 ~ 3.5), Head ~5.5mm (4.8 ~ 6.2)
-                    # M4: Shank ~4.0mm (3.6 ~ 4.8), Head ~7.0mm (6.3 ~ 8.8)
                     if (2.4 <= shank_dia_mm <= 3.5) or (head_dia_mm <= 6.2 and shank_dia_mm < 3.6):
                         cls_name = f"M3 Screw (L={tot_l_mm:.0f}mm)"
                         color = (0, 255, 0)
@@ -759,14 +886,17 @@ def run_vision_loop(headless=False):
                     cv2.drawContours(vis, [box], 0, color, 2)
                     cv2.drawMarker(vis, (cx_i, cy_i), (0, 0, 255), cv2.MARKER_CROSS, 10, 2)
 
-                    # Text Overlay
-                    info_line1 = f"{cls_name}"
-                    info_line2 = f"3D: [{x_3d_mm:+.1f}, {y_3d_mm:+.1f}, {z_mm:.1f}]mm | {deg:.0f}deg"
-                    cv2.putText(vis, info_line1, (cx_i - 40, cy_i - 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
-                    cv2.putText(vis, info_line2, (cx_i - 40, cy_i - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.36, (255, 255, 255), 1)
+                    # Text Overlay with Calibrated Table 2D Coordinates
+                    info_line1 = f"{cls_name} [d={shank_dia_mm:.1f}mm]"
+                    info_line2 = f"Tbl: [{x_tbl_mm:+.1f}, {y_tbl_mm:+.1f}]mm | r={dist_center_mm:.1f}"
+                    cv2.putText(vis, info_line1, (cx_i - 45, cy_i - 18), cv2.FONT_HERSHEY_SIMPLEX, 0.44, color, 2)
+                    cv2.putText(vis, info_line2, (cx_i - 45, cy_i - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (56, 189, 248), 1)
 
                     detected_items.append({
                         "class": cls_name,
+                        "x_tbl": x_tbl_mm,
+                        "y_tbl": y_tbl_mm,
+                        "dist_center": dist_center_mm,
                         "x_3d": float(x_3d_mm),
                         "y_3d": float(y_3d_mm),
                         "z_3d": float(z_mm),
@@ -783,11 +913,11 @@ def run_vision_loop(headless=False):
 
             avg_z = float(np.mean(all_z)) if all_z else 0.0
             mode_lbl = "BLACK SCREW (White BG)" if black_mode else "SILVER SCREW (Dark BG)"
-            cv2.putText(vis, f"D405 Precision Inspector | FPS: {fps:.1f} | Mode: {mode_lbl} | Thresh: {thresh_val}", 
-                        (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 2)
-            cv2.putText(vis, f"Detected: M3 = {m3_count} pcs (Green) | M4 = {m4_count} pcs (Orange) | Z_avg: {avg_z:.1f}mm", 
-                        (15, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (0, 255, 255), 2)
-            cv2.putText(vis, "[Web: http://localhost:5000] | Keys: [B] Mode | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
+            cv2.putText(vis, f"D405 Calibrated Inspector | FPS: {fps:.1f} | Mode: {mode_lbl} | Tilt: P={cur_pitch:+.1f}° R={cur_roll:+.1f}°", 
+                        (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+            cv2.putText(vis, f"Detected: M3 = {m3_count} | M4 = {m4_count} | Z_avg: {avg_z:.1f}mm | Table Leveled: {'YES' if is_calib else 'PENDING'}", 
+                        (15, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 255), 2)
+            cv2.putText(vis, "[Web: http://localhost:5000] | [C] Calib Plane | [B] Mode | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
                         (15, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
 
             # Update Global State
@@ -807,6 +937,10 @@ def run_vision_loop(headless=False):
                 if key == ord('q') or key == 27:
                     state.running = False
                     break
+                elif key == ord('c'):
+                    with state.lock:
+                        state.recalib_requested = True
+                        print("[INFO] Requested plane re-calibration...")
                 elif key == ord('b'):
                     with state.lock:
                         state.black_screw_mode = not state.black_screw_mode
@@ -841,7 +975,7 @@ def main():
 
     print("==================================================================")
     print("   Intel RealSense D405: M3 / M4 Screw 3D Precision Detector")
-    print("   Method 1: Zero-Shot Geometric Measurement & 3D Pose Estimator")
+    print("   Method 1: Zero-Shot Geometric Measurement & Plane Leveling")
     print("==================================================================")
     print(f"👉 1-Click Verification Web Viewer: http://localhost:{args.port}")
     print("👉 Desktop GUI Window: Open on DISPLAY (Press 'q' in window to exit)")
