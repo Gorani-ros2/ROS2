@@ -673,34 +673,51 @@ def run_vision_loop(headless=False):
             screw_mask = cv2.morphologyEx(screw_mask, cv2.MORPH_OPEN, clean_k)
             screw_mask = cv2.morphologyEx(screw_mask, cv2.MORPH_CLOSE, clean_k)
 
-            # 2. Dense Plane Fitting Calibration (Tilt Alignment)
-            if need_recalib and pad_canvas is not None:
+            # 2. Real-time Continuous Dynamic Plane Tracking (10 Hz with EMA smoothing)
+            if pad_canvas is not None and (frame_count % 3 == 0 or need_recalib):
                 yy, xx = np.where(pad_canvas > 0)
                 if len(xx) > 1000:
-                    step = 25
+                    step = 30
                     xx_s, yy_s = xx[::step], yy[::step]
                     raw_z = d_raw[yy_s, xx_s] * depth_scale * 1000.0 # mm
-                    valid = (raw_z > 200.0) & (raw_z < 360.0)
-                    if np.sum(valid) > 100:
+                    valid = (raw_z > 200.0) & (raw_z < 380.0)
+                    if np.sum(valid) > 80:
                         xs = ((xx_s[valid] - cx_cam) * raw_z[valid]) / fx
                         ys = ((yy_s[valid] - cy_cam) * raw_z[valid]) / fy
                         zs = raw_z[valid]
                         A = np.column_stack((xs, ys, np.ones(len(xs))))
                         plane_fit, _, _, _ = np.linalg.lstsq(A, zs, rcond=None)
-                        pa, pb, pc = plane_fit
+                        pa_raw, pb_raw, pc_raw = plane_fit
 
                         # Normal vector of table in camera frame
-                        norm_vec = np.array([-pa, -pb, 1.0])
+                        norm_vec = np.array([-pa_raw, -pb_raw, 1.0])
                         norm_vec /= np.linalg.norm(norm_vec)
 
-                        pitch = float(np.degrees(np.arctan(pb)))
-                        roll = float(np.degrees(np.arctan(pa)))
+                        pitch_raw = float(np.degrees(np.arctan(pb_raw)))
+                        roll_raw = float(np.degrees(np.arctan(pa_raw)))
+
+                        # Smooth with EMA filter (alpha=0.35) for real-time tracking without jitter
+                        with state.lock:
+                            if state.calibrated and not need_recalib:
+                                alpha = 0.35
+                                pa = float(state.plane_a * (1 - alpha) + pa_raw * alpha)
+                                pb = float(state.plane_b * (1 - alpha) + pb_raw * alpha)
+                                pc = float(state.plane_c * (1 - alpha) + pc_raw * alpha)
+                                pitch = float(state.pitch_deg * (1 - alpha) + pitch_raw * alpha)
+                                roll = float(state.roll_deg * (1 - alpha) + roll_raw * alpha)
+                            else:
+                                pa, pb, pc = float(pa_raw), float(pb_raw), float(pc_raw)
+                                pitch, roll = pitch_raw, roll_raw
+
+                        # Recompute smoothed normal
+                        norm_vec_s = np.array([-pa, -pb, 1.0])
+                        norm_vec_s /= np.linalg.norm(norm_vec_s)
 
                         # Rodrigues rotation matrix aligning table normal to [0, 0, 1]
                         target_z = np.array([0.0, 0.0, 1.0])
-                        v = np.cross(norm_vec, target_z)
+                        v = np.cross(norm_vec_s, target_z)
                         s = np.linalg.norm(v)
-                        c_ang = np.dot(norm_vec, target_z)
+                        c_ang = np.dot(norm_vec_s, target_z)
                         vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
                         R_l = np.eye(3) + vx + np.dot(vx, vx) * ((1.0 - c_ang) / (s**2 + 1e-9))
 
@@ -725,16 +742,15 @@ def run_vision_loop(headless=False):
                         orig_level = np.dot(R_l, orig_pt_cam)
 
                         with state.lock:
-                            state.plane_a = float(pa)
-                            state.plane_b = float(pb)
-                            state.plane_c = float(pc)
+                            state.plane_a = pa
+                            state.plane_b = pb
+                            state.plane_c = pc
                             state.pitch_deg = pitch
                             state.roll_deg = roll
                             state.R_level = R_l
                             state.origin_level = orig_level
                             state.calibrated = True
                             state.recalib_requested = False
-                        print(f"[CALIB] Fitted Plane: Z = {pa:.4f}X + {pb:.4f}Y + {pc:.1f}mm | Pitch={pitch:+.2f}°, Roll={roll:+.2f}°")
 
             with state.lock:
                 R_cur = state.R_level.copy()
