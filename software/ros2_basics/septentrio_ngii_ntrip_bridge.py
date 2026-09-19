@@ -44,9 +44,9 @@ class SeptentrioNGIINtripBridge(Node):
         self.declare_parameter('port', 'auto')
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('frame_id', 'gnss')
-        self.declare_parameter('caster_host', 'rts1.ngii.go.kr')
+        self.declare_parameter('caster_host', 'rts2.ngii.go.kr')
         self.declare_parameter('caster_port', 2101)
-        self.declare_parameter('mountpoint', 'VRS-RTCM34')
+        self.declare_parameter('mountpoint', 'VRS-RTCM32')
         self.declare_parameter('username', 'gorani')
         self.declare_parameter('password', 'ngii')
 
@@ -206,11 +206,9 @@ class SeptentrioNGIINtripBridge(Node):
                 auth_b64 = base64.b64encode(auth_str.encode('ascii')).decode('ascii')
 
                 req = (
-                    f"GET /{self.mountpoint} HTTP/1.1\r\n"
-                    f"Host: {self.caster_host}:{self.caster_port}\r\n"
+                    f"GET /{self.mountpoint} HTTP/1.0\r\n"
                     f"User-Agent: NTRIP SeptentrioNGIIBridge/1.0\r\n"
-                    f"Authorization: Basic {auth_b64}\r\n"
-                    f"Connection: close\r\n\r\n"
+                    f"Authorization: Basic {auth_b64}\r\n\r\n"
                 )
                 sock.sendall(req.encode('ascii'))
 
@@ -223,11 +221,20 @@ class SeptentrioNGIINtripBridge(Node):
 
                 first_line = response_hdr.split(b'\r\n')[0].decode('ascii', errors='ignore')
                 if '200' in first_line or 'ICY 200' in first_line:
-                    self.get_logger().info(f"NTRIP Connection Established! Mountpoint: '{self.mountpoint}'")
+                    self.get_logger().info(f"NTRIP Connection Established! Mountpoint: '{self.mountpoint}' on {self.caster_host}")
                 else:
-                    self.get_logger().error(f"NTRIP Caster Rejected Connection: {first_line}")
+                    self.get_logger().error(f"NTRIP Caster Rejected Connection ({self.caster_host}:{self.caster_port}/{self.mountpoint}): {first_line}")
                     sock.close()
-                    time.sleep(5.0)
+                    # Automatic failover between NGII casters upon rejection
+                    if self.caster_host == 'rts1.ngii.go.kr':
+                        self.get_logger().warn("Switching to backup caster rts2.ngii.go.kr (VRS-RTCM32)...")
+                        self.caster_host = 'rts2.ngii.go.kr'
+                        self.mountpoint = 'VRS-RTCM32'
+                    elif self.caster_host == 'rts2.ngii.go.kr':
+                        self.get_logger().warn("Switching to alternate mountpoint RTK-RTCM32 on rts1.ngii.go.kr...")
+                        self.caster_host = 'rts1.ngii.go.kr'
+                        self.mountpoint = 'RTK-RTCM32'
+                    time.sleep(3.0)
                     continue
 
                 sock.settimeout(2.0)

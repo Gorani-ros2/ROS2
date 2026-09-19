@@ -341,6 +341,43 @@ HTML_TEMPLATE = """
                 <div id="snap-msg" style="font-size: 12px; color: var(--accent); margin-top: 8px; min-height: 18px;"></div>
             </div>
 
+            <!-- Duco-910 Robot Automation Panel -->
+            <div class="control-panel" style="border: 1px solid #38bdf8;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="color: #38bdf8;">🤖 Duco-910 Robot Arm Controls</h3>
+                    <span id="robot-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: #15803d; color: #fff;">READY</span>
+                </div>
+                <div id="robot-status-text" style="font-size: 12px; color: var(--text-dim); margin-bottom: 12px;">
+                    TCP: <span id="robot-tcp" style="color: #f1f5f9; font-family: monospace;">[-476.4, 63.8, 333.9]</span> | Tilt: <span id="robot-tilt" style="color: #22c55e;">0.0°</span>
+                </div>
+
+                <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 8px;">
+                    <button class="btn btn-secondary" onclick="runRobot('step1_level')">1️⃣ 0° 수평 정렬</button>
+                    <button class="btn btn-secondary" onclick="runRobot('step2_set_view')">2️⃣ m4_view 저장</button>
+                </div>
+                <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 8px;">
+                    <button class="btn btn-purple" onclick="runRobot('step3_home')">3️⃣ Folded Home 이동</button>
+                    <button class="btn btn-purple" onclick="runRobot('step4_view')">4️⃣ m4_view 복귀</button>
+                </div>
+
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+                    <label style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: block;">5️⃣ 나사 10mm 비주얼 서보잉 접근</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="servo-target-select" style="flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px;">
+                            <option value="2">나사 #2 (중앙 인근 [26.6, -9.4]mm)</option>
+                            <option value="0">나사 #0 (상단 [-9.2, +77.0]mm)</option>
+                            <option value="1">나사 #1 (중앙 [-30.4, +1.1]mm)</option>
+                            <option value="3">나사 #3 (중앙 [+9.5, -26.6]mm)</option>
+                            <option value="4">나사 #4 (우측 [+143.7, -26.4]mm)</option>
+                            <option value="5">나사 #5 (좌측 [-158.5, -28.0]mm)</option>
+                            <option value="6">나사 #6 (하단 [-10.7, -107.4]mm)</option>
+                        </select>
+                        <button class="btn btn-success" style="padding: 6px 14px; white-space: nowrap;" onclick="runServo()">🚀 10mm 접근</button>
+                    </div>
+                </div>
+                <div id="robot-msg" style="font-size: 12px; color: #38bdf8; margin-top: 8px; min-height: 18px; word-break: break-word;"></div>
+            </div>
+
             <!-- Binary Inspection Mask Feed -->
             <div class="feed-container">
                 <div class="feed-header">
@@ -415,6 +452,70 @@ HTML_TEMPLATE = """
                     document.getElementById('snap-msg').innerText = 'Saved: ' + d.filename;
                     setTimeout(() => { document.getElementById('snap-msg').innerText = ''; }, 4000);
                 });
+        }
+
+        function runRobot(action) {
+            const msg = document.getElementById('robot-msg');
+            const badge = document.getElementById('robot-badge');
+            badge.textContent = 'RUNNING';
+            badge.style.background = '#d97706';
+            msg.textContent = `🚀 로봇 [${action}] 실행 중...`;
+            fetch(`/api/robot/${action}`, { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '완료' : '실패'));
+                    badge.textContent = d.success ? 'READY' : 'ERROR';
+                    badge.style.background = d.success ? '#15803d' : '#dc2626';
+                    updateRobotStatus();
+                })
+                .catch(e => {
+                    msg.textContent = '❌ 통신 오류: ' + e;
+                    badge.textContent = 'ERROR';
+                    badge.style.background = '#dc2626';
+                });
+        }
+
+        function runServo() {
+            const sel = document.getElementById('servo-target-select').value;
+            const msg = document.getElementById('robot-msg');
+            const badge = document.getElementById('robot-badge');
+            badge.textContent = 'SERVOING';
+            badge.style.background = '#d97706';
+            msg.textContent = `🚀 나사 #${sel} 10mm 서보잉 접근 실행 중...`;
+            fetch(`/api/robot/step5_servo?target=${sel}`, { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '서보잉 완료' : '실패'));
+                    badge.textContent = d.success ? 'READY' : 'ERROR';
+                    badge.style.background = d.success ? '#15803d' : '#dc2626';
+                    updateRobotStatus();
+                })
+                .catch(e => {
+                    msg.textContent = '❌ 서보잉 오류: ' + e;
+                    badge.textContent = 'ERROR';
+                    badge.style.background = '#dc2626';
+                });
+        }
+
+        function updateRobotStatus() {
+            fetch('/api/robot/status')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.tcp) {
+                        document.getElementById('robot-tcp').innerText = `[${d.tcp[0].toFixed(1)}, ${d.tcp[1].toFixed(1)}, ${d.tcp[2].toFixed(1)}]`;
+                        const tilt = Math.hypot(d.tcp[3] - 180.0, d.tcp[4]).toFixed(1);
+                        document.getElementById('robot-tilt').innerText = tilt + '°';
+                    }
+                    const badge = document.getElementById('robot-badge');
+                    if (d.is_moving) {
+                        badge.textContent = 'MOVING';
+                        badge.style.background = '#d97706';
+                    } else if (badge.textContent !== 'SERVOING' && badge.textContent !== 'RUNNING') {
+                        badge.textContent = 'READY';
+                        badge.style.background = '#15803d';
+                    }
+                })
+                .catch(() => {});
         }
 
         // Live Poll Status
@@ -547,6 +648,50 @@ def api_snapshot():
             cv2.imwrite(fname, state.current_frame)
             return jsonify({"success": True, "filename": fname})
     return jsonify({"success": False, "error": "No frame available"})
+
+# ==============================================================================
+# Robot Automation Endpoints (Duco-910 Web Telemetry & Control Bridge)
+# ==============================================================================
+@app.route('/api/robot/status')
+def api_robot_status():
+    import subprocess
+    try:
+        res = subprocess.run(["python3", "/home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py", "status"], 
+                             capture_output=True, text=True, timeout=5)
+        out = res.stdout
+        tcp = None
+        moving = False
+        for line in out.split('\n'):
+            if "TCP Pose" in line and "X=" in line:
+                import re
+                m = re.findall(r'[-+]?\d*\.\d+|\d+', line)
+                if len(m) >= 6:
+                    tcp = [float(x) for x in m[:6]]
+            if "Motion State" in line and "MOVING" in line:
+                moving = True
+        return jsonify({"connected": True, "is_moving": moving, "tcp": tcp})
+    except Exception as e:
+        return jsonify({"connected": False, "is_moving": False, "error": str(e)})
+
+@app.route('/api/robot/<action>', methods=['POST'])
+def api_robot_action(action):
+    if action not in ["step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo"]:
+        return jsonify({"success": False, "error": f"Invalid action: {action}"}), 400
+    
+    target = request.args.get('target', default=None)
+    cmd = ["python3", "/home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py", action, "--execute"]
+    if action == "step5_servo" and target is not None and target != "all":
+        cmd.extend(["--target", str(target)])
+
+    import subprocess
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        out = proc.stdout.strip()
+        lines = [line.strip() for line in out.split('\n') if 'Arrived' in line or '✅' in line or 'ERROR' in line or 'Completed' in line or 'Leveled' in line]
+        summary = lines[-1] if lines else "명령 완료"
+        return jsonify({"success": proc.returncode == 0, "message": summary, "log": out})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "message": f"실행 실패: {e}"})
 
 # ==============================================================================
 # Vision Processing Engine (Zero-Shot Precision Algorithm with Plane Leveling)
