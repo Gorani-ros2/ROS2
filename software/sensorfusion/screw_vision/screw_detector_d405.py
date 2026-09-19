@@ -74,6 +74,10 @@ def main():
 
     clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
 
+    # Detection Mode: Default to Black Screw Mode (White/Light Background)
+    black_screw_mode = True
+    thresh_val = 90
+
     fps_start = time.time()
     frame_count = 0
     fps = 0.0
@@ -97,14 +101,18 @@ def main():
             color_image = np.asanyarray(color_frame.get_data())
             h, w = color_image.shape[:2]
 
-            # 1. Preprocessing for metallic reflections
+            # 1. Preprocessing for reflections
             gray = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
             enhanced = clahe.apply(gray)
             blurred = cv2.GaussianBlur(enhanced, (5, 5), 0)
 
-            # 2. Adaptive / Otsu Thresholding
-            # Dark background mat assumption
-            _, thresh = cv2.threshold(blurred, 65, 255, cv2.THRESH_BINARY)
+            # 2. Adaptive Thresholding based on Screw Color
+            if black_screw_mode:
+                # Black screw on bright/white background: Invert so black screws become white blobs
+                _, thresh = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY_INV)
+            else:
+                # Silver screw on dark background: Metallic highlights become white blobs
+                _, thresh = cv2.threshold(blurred, thresh_val, 255, cv2.THRESH_BINARY)
 
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
@@ -208,24 +216,38 @@ def main():
                     cv2.putText(vis, coord_str, (cx_i - 15, cy_i - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1)
 
             # HUD Display
-            hud = vis[:70, :].copy()
-            cv2.rectangle(vis, (0, 0), (w, 70), (20, 20, 20), -1)
-            cv2.addWeighted(hud, 0.25, vis[:70, :], 0.75, 0, vis[:70, :])
+            hud = vis[:75, :].copy()
+            cv2.rectangle(vis, (0, 0), (w, 75), (20, 20, 20), -1)
+            cv2.addWeighted(hud, 0.25, vis[:75, :], 0.75, 0, vis[:75, :])
 
-            cv2.putText(vis, f"Intel RealSense D405 Precision Inspection | FPS: {fps:.1f}", 
-                        (15, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            cv2.putText(vis, f"Detected on Desk: M3 = {m3_count} pcs | M4 = {m4_count} pcs", 
-                        (15, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+            mode_str = "BLACK SCREW (White/Light BG)" if black_screw_mode else "SILVER SCREW (Dark BG)"
+            cv2.putText(vis, f"D405 Inspection | FPS: {fps:.1f} | Mode: {mode_str} | Thresh: {thresh_val}", 
+                        (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            cv2.putText(vis, f"Detected: M3 = {m3_count} pcs | M4 = {m4_count} pcs", 
+                        (15, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+            cv2.putText(vis, "[B] Toggle Black/Silver | [T]/[G] Thresh +/- | [S] Snap | [Q] Quit", 
+                        (15, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), 1)
 
             cv2.imshow("Intel RealSense D405 - Screw Detection", vis)
+            cv2.imshow("D405 Inspection Binary Mask", opened)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q') or key == 27:
                 break
+            elif key == ord('b'):
+                black_screw_mode = not black_screw_mode
+                print(f"[INFO] Toggled mode to: {'BLACK SCREW (White/Light BG)' if black_screw_mode else 'SILVER SCREW (Dark BG)'}")
+            elif key == ord('t'):
+                thresh_val = min(245, thresh_val + 5)
+                print(f"[INFO] Threshold increased to: {thresh_val}")
+            elif key == ord('g'):
+                thresh_val = max(15, thresh_val - 5)
+                print(f"[INFO] Threshold decreased to: {thresh_val}")
             elif key == ord('s'):
                 fname = f"d405_screw_snap_{int(time.time())}.png"
                 cv2.imwrite(fname, vis)
-                print(f"[INFO] Snapshot saved to: {fname}")
+                cv2.imwrite(f"d405_mask_snap_{int(time.time())}.png", opened)
+                print(f"[INFO] Snapshot & binary mask saved.")
 
     finally:
         pipeline.stop()
