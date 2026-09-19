@@ -240,14 +240,15 @@ def main():
             cv2.putText(vis, label, (cx - 8, cy - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
             
         # Top HUD Banner
-        hud_bg = vis[:65, :].copy()
-        cv2.rectangle(vis, (0, 0), (vis.shape[1], 65), (25, 25, 25), -1)
-        cv2.addWeighted(hud_bg, 0.2, vis[:65, :], 0.8, 0, vis[:65, :])
+        hud_bg = vis[:75, :].copy()
+        cv2.rectangle(vis, (0, 0), (vis.shape[1], 75), (25, 25, 25), -1)
+        cv2.addWeighted(hud_bg, 0.2, vis[:75, :], 0.8, 0, vis[:75, :])
         
-        cv2.putText(vis, f"Duco Screw Vision | Z: {detector.distance_mm:.1f}mm | FPS: {fps:.1f}", 
-                    (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
-        cv2.putText(vis, f"Detected: M3 = {m3_count} pcs | M4 = {m4_count} pcs", 
-                    (15, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+        mode_str = "SILVER (Dark BG)" if detector.dark_bg else "BLACK SCREW (Light BG)"
+        cv2.putText(vis, f"Duco Screw Vision | Z: {detector.distance_mm:.1f}mm | FPS: {fps:.1f} | Mode: {mode_str}", 
+                    (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        cv2.putText(vis, f"Detected: M3 = {m3_count} pcs | M4 = {m4_count} pcs  [B: Toggle Black/Silver | +/-: Z | S: Snap | Q: Quit]", 
+                    (15, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
                     
         cv2.imshow("Duco M3/M4 Screw Detector", vis)
         cv2.imshow("Binary Mask (Inspection)", binary_mask)
@@ -255,6 +256,9 @@ def main():
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q') or key == 27:
             break
+        elif key == ord('b'):
+            detector.dark_bg = not detector.dark_bg
+            print(f"[INFO] Mode toggled: {'SILVER SCREW (Dark BG)' if detector.dark_bg else 'BLACK SCREW (Light BG)'}")
         elif key == ord('+') or key == ord('='):
             detector.distance_mm += 5.0
             print(f"[INFO] Distance Z increased to: {detector.distance_mm:.1f} mm")
