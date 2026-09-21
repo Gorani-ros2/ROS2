@@ -361,19 +361,16 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-                    <label style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: block;">5️⃣ 나사 10mm 비주얼 서보잉 접근</label>
-                    <div style="display: flex; gap: 8px;">
-                        <select id="servo-target-select" style="flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px;">
-                            <option value="2">나사 #2 (중앙 인근 [26.6, -9.4]mm)</option>
-                            <option value="0">나사 #0 (상단 [-9.2, +77.0]mm)</option>
-                            <option value="1">나사 #1 (중앙 [-30.4, +1.1]mm)</option>
-                            <option value="3">나사 #3 (중앙 [+9.5, -26.6]mm)</option>
-                            <option value="4">나사 #4 (우측 [+143.7, -26.4]mm)</option>
-                            <option value="5">나사 #5 (좌측 [-158.5, -28.0]mm)</option>
-                            <option value="6">나사 #6 (하단 [-10.7, -107.4]mm)</option>
-                        </select>
-                        <button class="btn btn-success" style="padding: 6px 14px; white-space: nowrap;" onclick="runServo()">🚀 10mm 접근</button>
+                    <label style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: block;">5️⃣ 외곽 M4 나사 10mm 안전 접근 (직교 선형 보간)</label>
+                    <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
+                        <button class="btn btn-primary" onclick="runClockServo(12)">🕛 12시 (상) 10mm</button>
+                        <button class="btn btn-primary" onclick="runClockServo(3)">🕒 3시 (우) 10mm</button>
                     </div>
+                    <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
+                        <button class="btn btn-primary" onclick="runClockServo(6)">🕕 6시 (하) 10mm</button>
+                        <button class="btn btn-primary" onclick="runClockServo(9)">🕘 9시 (좌) 10mm</button>
+                    </div>
+                    <button class="btn btn-success" style="width: 100%; margin-top: 4px;" onclick="runClockServo('all')">🔄 4개 외곽 나사 전체 순차 주행 (12시→3시→6시→9시)</button>
                 </div>
                 <div id="robot-msg" style="font-size: 12px; color: #38bdf8; margin-top: 8px; min-height: 18px; word-break: break-word;"></div>
             </div>
@@ -475,23 +472,24 @@ HTML_TEMPLATE = """
                 });
         }
 
-        function runServo() {
-            const sel = document.getElementById('servo-target-select').value;
+        function runClockServo(target) {
             const msg = document.getElementById('robot-msg');
             const badge = document.getElementById('robot-badge');
-            badge.textContent = 'SERVOING';
+            badge.textContent = 'RUNNING';
             badge.style.background = '#d97706';
-            msg.textContent = `🚀 나사 #${sel} 10mm 서보잉 접근 실행 중...`;
-            fetch(`/api/robot/step5_servo?target=${sel}`, { method: 'POST' })
+            const label = target === 'all' ? '시계방향 4개 전체 순차 주행' : `${target}시 외곽 나사`;
+            msg.textContent = `🚀 [${label}] 10mm 안전 접근 실행 중... (안전높이 Z=65.0mm)`;
+            const url = target === 'all' ? '/api/robot/clock_outer' : `/api/robot/clock_outer?target=${target}`;
+            fetch(url, { method: 'POST' })
                 .then(r => r.json())
                 .then(d => {
-                    msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '서보잉 완료' : '실패'));
+                    msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '완료' : '실패'));
                     badge.textContent = d.success ? 'READY' : 'ERROR';
                     badge.style.background = d.success ? '#15803d' : '#dc2626';
                     updateRobotStatus();
                 })
                 .catch(e => {
-                    msg.textContent = '❌ 서보잉 오류: ' + e;
+                    msg.textContent = '❌ 통신 오류: ' + e;
                     badge.textContent = 'ERROR';
                     badge.style.background = '#dc2626';
                 });
@@ -680,7 +678,7 @@ def api_robot_action(action):
     
     target = request.args.get('target', default=None)
     cmd = ["python3", "/home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py", action, "--execute"]
-    if action == "step5_servo" and target is not None and target != "all":
+    if target is not None and target != "all":
         cmd.extend(["--target", str(target)])
 
     import subprocess
