@@ -178,7 +178,7 @@ class DucoController:
         t0 = time.time()
         while time.time() - t0 < timeout:
             st = self.get_status()
-            if not st['is_moving'] and st['program_state'] == 0:
+            if not st['is_moving'] and st['program_state'] in (0, 3, 4, 5):
                 return True
             time.sleep(0.2)
         return False

@@ -50,7 +50,7 @@ class VisionState:
         self.avg_depth_mm = 0.0
         self.detections = []
         self.black_screw_mode = True
-        self.thresh_val = 90
+        self.thresh_val = 110
         self.auto_foam_roi = True
         self.snapshot_saved = None
         
@@ -675,7 +675,7 @@ def api_robot_status():
 
 @app.route('/api/robot/<action>', methods=['POST'])
 def api_robot_action(action):
-    if action not in ["step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo"]:
+    if action not in ["step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo", "clock_outer"]:
         return jsonify({"success": False, "error": f"Invalid action: {action}"}), 400
     
     target = request.args.get('target', default=None)
@@ -792,7 +792,7 @@ def run_vision_loop(headless=False):
             # 1. Background Pad / Inspection Zone Detection
             pad_canvas = None
             if auto_roi and black_mode:
-                pad_mask = (blurred > 100).astype(np.uint8) * 255
+                pad_mask = (blurred > 65).astype(np.uint8) * 255
                 pad_cnts, _ = cv2.findContours(pad_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if pad_cnts:
                     c_foam = max(pad_cnts, key=cv2.contourArea)
@@ -800,8 +800,8 @@ def run_vision_loop(headless=False):
                     if foam_area > 0.08 * h * w:
                         pad_canvas = np.zeros_like(gray)
                         cv2.drawContours(pad_canvas, [c_foam], -1, 255, -1)
-                        # Erode 25px to strictly eliminate edge noise and table boundary bleed
-                        pad_eroded = cv2.erode(pad_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25)))
+                        # Erode 10px to eliminate table boundary bleed while preserving outer screws
+                        pad_eroded = cv2.erode(pad_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10)))
                         screw_mask = np.zeros_like(gray)
                         screw_mask[(blurred < thresh_val) & (pad_eroded > 0)] = 255
                     else:
@@ -913,12 +913,26 @@ def run_vision_loop(headless=False):
 
             for cnt in contours:
                 area = cv2.contourArea(cnt)
-                if area < 120 or area > 18000:
+                # Filter noise (<200px) and table background (>10000px)
+                if area < 200 or area > 10000:
                     continue
 
                 (cx, cy), radius = cv2.minEnclosingCircle(cnt)
                 cx_i, cy_i = int(cx), int(cy)
-                if cx_i < 60 or cx_i >= w - 60 or cy_i < 50 or cy_i >= h - 50:
+                if cx_i < 50 or cx_i >= w - 50 or cy_i < 15 or cy_i >= h - 15:
+                    continue
+
+                # Elongated aspect ratio filter (strictly rejects circles, standing nuts, and square text characters)
+                rect = cv2.minAreaRect(cnt)
+                (rcx, rcy), (rw, rh), angle = rect
+                ar = max(rw, rh) / (min(rw, rh) + 1e-5)
+                if ar < 1.8:
+                    continue
+
+                # Solidity filter (strictly rejects hollow/branched printed text letters like '밭', '농', etc.)
+                hull = cv2.convexHull(cnt)
+                solidity = float(area) / (cv2.contourArea(hull) + 1e-5)
+                if solidity < 0.70:
                     continue
 
                 # Query Real Sub-millimeter Depth with Perimeter Fallback
@@ -952,18 +966,21 @@ def run_vision_loop(headless=False):
 
                 z_mm = z_m * 1000.0
 
-                # Physical Area Filter in mm^2 (M4 screw area ~40..90 mm^2; reject nuts/noise < 35mm^2 and holes > 130mm^2)
+                # Reject objects on the lower table surface (e.g. table stickers, text like "밭농업기계개발연구센터" at Z~307mm)
+                # Foam pad surface is at Z ~291..296mm; table surface is ~15mm lower at Z ~307mm.
+                if z_mm > 302.0:
+                    continue
+
+                # Physical dimensions in mm
+                tot_l_mm = (max(rw, rh) * z_mm) / fx
+                tot_w_mm = (min(rw, rh) * z_mm) / fx
                 area_mm2 = area * ((z_mm / fx) ** 2)
-                if area_mm2 < 35.0 or area_mm2 > 130.0:
+
+                # Strict M4 screw physical dimensions: Length 14~28mm, Width 4.0~9.5mm, Area 50~125mm^2
+                if not (14.0 <= tot_l_mm <= 28.0 and 4.0 <= tot_w_mm <= 9.5 and 50.0 <= area_mm2 <= 125.0):
                     continue
 
                 all_z.append(z_mm)
-
-                rect = cv2.minAreaRect(cnt)
-                (rcx, rcy), (rw, rh), angle = rect
-                ar = max(rw, rh) / (min(rw, rh) + 1e-5)
-                tot_l_mm = (max(rw, rh) * z_mm) / fx
-                tot_w_mm = (min(rw, rh) * z_mm) / fx
 
                 # 3D Deprojection (Camera Optical Frame)
                 pt_3d = rs.rs2_deproject_pixel_to_point(intrinsics, [cx, cy], z_m)
@@ -1008,22 +1025,10 @@ def run_vision_loop(headless=False):
                     head_dia_mm = tot_w_mm
                     shank_dia_mm = tot_w_mm
 
-                # Classification Rules (Strict M4 Socket Head Cap Screw Only)
-                # M4 DIN 912 Standard: Head D = 6.3 ~ 8.8 mm, Shank d = 3.5 ~ 4.8 mm, Length = 12 ~ 35 mm
-                cls_name = None
+                # Direct verified M4 Socket Head Cap Screw identification
                 color = (0, 165, 255) # Orange
-
-                if head_dia_mm > 10.0 or head_dia_mm < 5.5 or tot_l_mm > 35.0 or tot_l_mm < 10.0:
-                    continue
-
-                if ar < 1.4:
-                    if 6.0 <= head_dia_mm <= 9.2:
-                        cls_name = "M4 Head"
-                        m4_count += 1
-                else:
-                    if (3.2 <= shank_dia_mm <= 5.2) or (6.0 <= head_dia_mm <= 9.5):
-                        cls_name = f"M4 Screw (L={tot_l_mm:.0f}mm)"
-                        m4_count += 1
+                cls_name = f"M4 Screw (L={tot_l_mm:.0f}mm)"
+                m4_count += 1
 
                 if cls_name:
                     box = np.int32(cv2.boxPoints(rect))
@@ -1050,19 +1055,19 @@ def run_vision_loop(headless=False):
                         "length": float(tot_l_mm)
                     })
 
-            # HUD Display on main frame
-            hud = vis[:75, :].copy()
-            cv2.rectangle(vis, (0, 0), (w, 75), (20, 20, 20), -1)
-            cv2.addWeighted(hud, 0.25, vis[:75, :], 0.75, 0, vis[:75, :])
+            # HUD Display on main frame (placed at bottom to never obscure 12 o'clock screw)
+            hud = vis[h-75:h, :].copy()
+            cv2.rectangle(vis, (0, h-75), (w, h), (20, 20, 20), -1)
+            cv2.addWeighted(hud, 0.25, vis[h-75:h, :], 0.75, 0, vis[h-75:h, :])
 
             avg_z = float(np.mean(all_z)) if all_z else 0.0
             mode_lbl = "BLACK SCREW (White BG)" if black_mode else "SILVER SCREW (Dark BG)"
             cv2.putText(vis, f"D405 Calibrated Inspector | FPS: {fps:.1f} | Mode: {mode_lbl} | Tilt: P={cur_pitch:+.1f}° R={cur_roll:+.1f}°", 
-                        (15, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+                        (15, h - 52), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
             cv2.putText(vis, f"Detected M4: {m4_count} pcs | Z_avg: {avg_z:.1f}mm | Table Leveled: {'YES' if is_calib else 'PENDING'}", 
-                        (15, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 255), 2)
+                        (15, h - 28), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 255), 2)
             cv2.putText(vis, "[Web: http://localhost:5000] | [C] Calib Plane | [B] Mode | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
-                        (15, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
+                        (15, h - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
 
             # Update Global State
             with state.lock:
