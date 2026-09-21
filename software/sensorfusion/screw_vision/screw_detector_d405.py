@@ -915,14 +915,15 @@ def run_vision_loop(headless=False):
             screw_mask = cv2.morphologyEx(screw_mask, cv2.MORPH_CLOSE, clean_k)
 
             # 2. Real-time Continuous Dynamic Plane Tracking (10 Hz with EMA smoothing)
-            if pad_canvas is not None and (frame_count % 3 == 0 or need_recalib):
+            # 2. Table Plane Calibration (Locked at m4_view standby to prevent edge/descent distortion)
+            if pad_canvas is not None and (not state.calibrated or need_recalib or frame_count < 25):
                 yy, xx = np.where(pad_canvas > 0)
-                if len(xx) > 1000:
+                if len(xx) > 2000:
                     step = 30
                     xx_s, yy_s = xx[::step], yy[::step]
                     raw_z = d_raw[yy_s, xx_s] * depth_scale * 1000.0 # mm
                     valid = (raw_z > 200.0) & (raw_z < 380.0)
-                    if np.sum(valid) > 80:
+                    if np.sum(valid) > 80 and np.median(raw_z[valid]) > 250.0:
                         xs = ((xx_s[valid] - cx_cam) * raw_z[valid]) / fx
                         ys = ((yy_s[valid] - cy_cam) * raw_z[valid]) / fy
                         zs = raw_z[valid]
