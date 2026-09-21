@@ -530,9 +530,315 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True, speed_mul
     print("\n🎉 All 4 Outermost Screws (12시 -> 3시 -> 6시 -> 9시) successfully visited and returned to m4_view!")
     return True
 
+def cmd_step5_diagonal_servo(controller, target_screw_idx=None, execute=True, speed_mult=2.0):
+    """
+    Step 5 (Diagonal): High-speed 3D linear interpolated diagonal approach & diagonal return.
+    Sequence:
+      1. m4_view (Z=334mm) -> Diagonal 3D linear descent (movel) -> Mid Target (Z=130mm)
+      2. Mid-altitude high-resolution zeroing (Z=130mm)
+      3. Final linear vertical descent to 10mm clearance (Z=65mm)
+      4. Hover 1.5s inspection & snapshot
+      5. Small vertical lift to surface clearance (Z=100mm)
+      6. Diagonal 3D linear ascent (movel) -> Return to m4_view (Z=334mm)
+    """
+    scale = speed_mult / 2.0
+    vel_travel_m_s = min(0.06 * scale, 0.18)
+    acc_travel_m_s2 = min(0.10 * scale, 0.30)
+    vel_mid_m_s = min(0.04 * scale, 0.12)
+    acc_mid_m_s2 = min(0.08 * scale, 0.24)
+    vel_desc_m_s = min(0.03 * scale, 0.09)
+    acc_desc_m_s2 = min(0.06 * scale, 0.18)
+    vel_joint_deg = min(20.0 * scale, 60.0)
+    acc_joint_deg = min(30.0 * scale, 90.0)
+
+    print(f"\n[STEP 5 - DIAGONAL] 3D Linear Interpolated Servo Pipeline (Speed: {speed_mult:.1f}x)...")
+    screws, v_meta = query_vision_screws()
+    if not screws:
+        print("[ERROR] No M4 screws detected by vision API!")
+        return False
+
+    print(f"  Found {len(screws)} detected M4 screws via live vision API:")
+    for idx, s in enumerate(screws):
+        print(f"   [{idx}] {s['class']} | Table: [{s['x_tbl']:+.1f}, {s['y_tbl']:+.1f}]mm | Cam: [{s['x_3d']:+.1f}, {s['y_3d']:+.1f}, {s['z_3d']:.1f}]mm")
+
+    targets_to_visit = [screws[target_screw_idx]] if target_screw_idx is not None else screws
+
+    tcp_m4_view = controller.named_poses.get("m4_view", {}).get("tcp_mm_deg")
+    if not tcp_m4_view:
+        tcp_m4_view = controller.get_tcp_pose()
+    if not tcp_m4_view:
+        print("[ERROR] Could not read m4_view pose!")
+        return False
+
+    MID_Z = 130.0        # mm (Closest reliable recognition height: ~8.5cm above table)
+    LIFT_Z = 100.0       # mm (Safe clearance lift before diagonal ascent)
+    SAFE_FLOOR_Z = 65.0  # mm (10mm clearance above screw head)
+
+    for i, target in enumerate(targets_to_visit):
+        t_name = target['class']
+        dx_cam = target['x_3d']
+        dy_cam = target['y_3d']
+        z_surface_mm = target['z_3d']
+
+        print(f"\n  ⚡ Target #{i+1}: {t_name} at Cam offset ΔX={dx_cam:+.1f}mm, ΔY={dy_cam:+.1f}mm, Surface Z={z_surface_mm:.1f}mm")
+        cur_tcp = controller.get_tcp_pose()
+        if not cur_tcp:
+            print("[ERROR] Cannot read TCP pose!")
+            continue
+
+        th_rad = math.radians(cur_tcp[5])
+        c_th, s_th = math.cos(th_rad), math.sin(th_rad)
+        dx_base = c_th * dx_cam + s_th * dy_cam
+        dy_base = s_th * dx_cam - c_th * dy_cam
+
+        target_mid  = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_low  = [target_mid[0], target_mid[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_lift = [target_mid[0], target_mid[1], LIFT_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+
+        print(f"     1️⃣ 3D Diagonal Descent Waypoint : X={target_mid[0]:.1f}, Y={target_mid[1]:.1f}, Z={target_mid[2]:.1f}mm")
+        print(f"     2️⃣ 10mm Low Vertical Descent   : X={target_low[0]:.1f}, Y={target_low[1]:.1f}, Z={target_low[2]:.1f}mm")
+        print(f"     3️⃣ Surface Safe Clearance Lift : X={target_lift[0]:.1f}, Y={target_lift[1]:.1f}, Z={target_lift[2]:.1f}mm")
+        print(f"     4️⃣ 3D Diagonal Return to View   : X={tcp_m4_view[0]:.1f}, Y={tcp_m4_view[1]:.1f}, Z={tcp_m4_view[2]:.1f}mm")
+
+        # IK checks
+        q_cur = controller.get_joints()
+        ik_mid = controller.cal_ik(target_mid, q_cur)
+        ik_low = controller.cal_ik(target_low, ik_mid if ik_mid else q_cur)
+        ik_lift = controller.cal_ik(target_lift, ik_low if ik_low else q_cur)
+        ik_view = controller.cal_ik(tcp_m4_view, ik_lift if ik_lift else q_cur)
+
+        if not ik_mid or not ik_low or not ik_lift:
+            print(f"     ❌ [ERROR] IK check failed for Target #{i+1}! Skipping.")
+            continue
+
+        if not execute:
+            print(f"     [DRY RUN] 3D Diagonal sequence for Target #{i+1} verified: OK.")
+            continue
+
+        # 1. 3D Diagonal Linear Descent directly to target_mid
+        print(f"     ⚡ [1/5] 3D Diagonal Linear Descent to recognition height (Z={MID_Z}mm, speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(target_mid, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
+        time.sleep(0.3)
+
+        # 2. Mid-altitude zeroing
+        print(f"     🔍 [2/5] Re-measuring target at mid-altitude for sub-mm zeroing...")
+        final_xy = [target_mid[0], target_mid[1]]
+        mid_screws, _ = query_vision_screws()
+        if mid_screws:
+            nearest_s = min(mid_screws, key=lambda s: s['x_3d']**2 + s['y_3d']**2)
+            d_err = math.hypot(nearest_s['x_3d'], nearest_s['y_3d'])
+            print(f"       🎯 Detected screw below camera: Cam=[{nearest_s['x_3d']:+.2f}, {nearest_s['y_3d']:+.2f}]mm (Residual Error={d_err:.2f}mm)")
+            if d_err < 35.0:
+                dx_corr = c_th * nearest_s['x_3d'] + s_th * nearest_s['y_3d']
+                dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
+                final_xy = [target_mid[0] + dx_corr, target_mid[1] + dy_corr]
+                print(f"       ✨ Zeroing residual offset: [ΔX_base={dx_corr:+.2f}, ΔY_base={dy_corr:+.2f}] mm")
+                target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+                controller.movel(target_mid_corrected, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
+                time.sleep(0.3)
+        else:
+            print(f"       ⚠️ No screw detected at mid-altitude, continuing with trajectory...")
+
+        # 3. Final linear vertical descent to 10mm clearance (Z = 65mm)
+        print(f"     🚀 [3/5] Cartesian linear vertical descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: {vel_desc_m_s*1000:.0f} mm/s)...")
+        target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        controller.movel(target_final_low, vel_m_s=vel_desc_m_s, acc_m_s2=acc_desc_m_s2, block=True)
+
+        # 4. Hover 1.5s and capture snapshot
+        print(f"     📸 [4/5] Hovering at 10mm clearance for 1.5s inspection...")
+        time.sleep(1.5)
+        try:
+            snap_req = urllib.request.Request("http://localhost:5000/api/snapshot", data=b"{}", headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(snap_req, timeout=2.0) as r:
+                res = json.loads(r.read().decode())
+                print(f"       📷 Snapshot saved: {res.get('filename')}")
+        except Exception as e:
+            pass
+
+        # 5. Safe clearance vertical lift (Z = 100mm)
+        print(f"     ⚡ [5/5] Vertical lift to safe clearance (Z={LIFT_Z}mm)...")
+        target_lift_final = [final_xy[0], final_xy[1], LIFT_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        controller.movel(target_lift_final, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
+        time.sleep(0.2)
+
+        # 6. 3D Diagonal Linear Ascent Return to m4_view
+        print(f"     ⚡ 3D Diagonal Linear Ascent return to 'm4_view' (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(tcp_m4_view, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
+        time.sleep(0.3)
+        print(f"     ✅ Target #{i+1} diagonal inspection cycle complete!")
+
+    return True
+
+def cmd_step5_clock_diagonal(controller, target_clock=None, execute=True, speed_mult=2.0):
+    """
+    Clockwise inspection of 4 outer screws using high-speed 3D diagonal linear interpolation:
+      - 3D diagonal descent from m4_view (Z=334mm) directly to screw mid-height (Z=130mm)
+      - Sub-mm zeroing at Z=130mm
+      - Precision vertical descent to 10mm clearance (Z=65mm)
+      - Snapshot hover 1.5s
+      - Vertical lift to safe clearance (Z=100mm)
+      - 3D diagonal ascending return directly to m4_view
+    """
+    scale = speed_mult / 2.0
+    vel_travel_m_s = min(0.06 * scale, 0.18)
+    acc_travel_m_s2 = min(0.10 * scale, 0.30)
+    vel_mid_m_s = min(0.04 * scale, 0.12)
+    acc_mid_m_s2 = min(0.08 * scale, 0.24)
+    vel_desc_m_s = min(0.03 * scale, 0.09)
+    acc_desc_m_s2 = min(0.06 * scale, 0.18)
+    vel_joint_deg = min(20.0 * scale, 60.0)
+    acc_joint_deg = min(30.0 * scale, 90.0)
+
+    print(f"\n[STEP 5 - CLOCK DIAGONAL] 3D Linear Diagonal Clock Pipeline (Speed: {speed_mult:.1f}x)...")
+    print("  Trajectory: m4_view ⤢ 12시 ⤢ m4_view ⤢ 3시 ⤢ m4_view ⤢ 6시 ⤢ m4_view ⤢ 9시 ⤢ m4_view")
+
+    if "m4_view" not in controller.named_poses:
+        print("[ERROR] 'm4_view' pose not registered!")
+        return False
+
+    tcp_m4_view = controller.named_poses["m4_view"].get("tcp_mm_deg") or controller.get_tcp_pose()
+
+    screws, _ = query_vision_screws()
+    if len(screws) < 4:
+        print(f"[ERROR] Found only {len(screws)} screws, expected at least 4 outer screws!")
+        return False
+
+    # Find the 4 outer screws:
+    s_12 = min(screws, key=lambda s: s['y_3d'])
+    s_3  = max(screws, key=lambda s: s['x_3d'])
+    s_6  = max(screws, key=lambda s: s['y_3d'])
+    s_9  = min(screws, key=lambda s: s['x_3d'])
+
+    clock_targets = [
+        ("12시 (상 / Top)", s_12),
+        ("3시 (우 / Right)", s_3),
+        ("6시 (하 / Bottom)", s_6),
+        ("9시 (좌 / Left)", s_9)
+    ]
+
+    if target_clock is not None:
+        clock_targets = [t for t in clock_targets if str(target_clock) in t[0]]
+        if not clock_targets:
+            print(f"[ERROR] Target clock '{target_clock}' not recognized! Use 12, 3, 6, or 9.")
+            return False
+
+    MID_Z = 130.0
+    LIFT_Z = 100.0
+    SAFE_FLOOR_Z = 65.0
+
+    for idx, (label, target) in enumerate(clock_targets):
+        print(f"\n=======================================================")
+        print(f"  ⚡ [{idx+1}/{len(clock_targets)}] Diagonal Visiting {label} Screw")
+        print(f"=======================================================")
+
+        cur_screws, _ = query_vision_screws()
+        if cur_screws:
+            if "12" in label:
+                target = min(cur_screws, key=lambda s: s['y_3d'])
+            elif "3" in label:
+                target = max(cur_screws, key=lambda s: s['x_3d'])
+            elif "6" in label:
+                target = max(cur_screws, key=lambda s: s['y_3d'])
+            elif "9" in label:
+                target = min(cur_screws, key=lambda s: s['x_3d'])
+
+        dx_cam = target['x_3d']
+        dy_cam = target['y_3d']
+        z_surface_mm = target['z_3d']
+
+        cur_tcp = controller.get_tcp_pose()
+        if not cur_tcp:
+            print("[ERROR] Cannot read TCP pose!")
+            return False
+
+        th_rad = math.radians(cur_tcp[5])
+        c_th, s_th = math.cos(th_rad), math.sin(th_rad)
+        dx_base = c_th * dx_cam + s_th * dy_cam
+        dy_base = s_th * dx_cam - c_th * dy_cam
+
+        target_mid  = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_low  = [target_mid[0], target_mid[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_lift = [target_mid[0], target_mid[1], LIFT_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+
+        print(f"  Camera Offset (30cm)   : [ΔX_cam={dx_cam:+.1f}, ΔY_cam={dy_cam:+.1f}, Z_cam={z_surface_mm:.1f}] mm")
+        print(f"  1️⃣ 3D Diagonal Waypoint : X={target_mid[0]:.1f}, Y={target_mid[1]:.1f}, Z={target_mid[2]:.1f}mm")
+        print(f"  2️⃣ 10mm Low Waypoint   : X={target_low[0]:.1f}, Y={target_low[1]:.1f}, Z={target_low[2]:.1f}mm")
+        print(f"  3️⃣ Safe Lift Waypoint  : X={target_lift[0]:.1f}, Y={target_lift[1]:.1f}, Z={target_lift[2]:.1f}mm")
+        print(f"  4️⃣ 3D Diagonal Return  : X={tcp_m4_view[0]:.1f}, Y={tcp_m4_view[1]:.1f}, Z={tcp_m4_view[2]:.1f}mm")
+
+        # IK reachability check
+        q_cur = controller.get_joints()
+        ik_mid = controller.cal_ik(target_mid, q_cur)
+        ik_low = controller.cal_ik(target_low, ik_mid if ik_mid else q_cur)
+        ik_lift = controller.cal_ik(target_lift, ik_low if ik_low else q_cur)
+        ik_view = controller.cal_ik(tcp_m4_view, ik_lift if ik_lift else q_cur)
+
+        if not ik_mid or not ik_low or not ik_lift:
+            print(f"  ❌ [ERROR] IK check failed for {label}! Skipping.")
+            continue
+
+        if not execute:
+            print(f"  [DRY RUN] Diagonal motion for {label} verified: OK.")
+            continue
+
+        # 1. 3D Diagonal linear descent directly from m4_view to target_mid
+        print(f"  ⚡ [1/5] 3D Diagonal Linear Descent to Z={MID_Z}mm (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(target_mid, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
+        time.sleep(0.3)
+
+        # 2. Mid-altitude zeroing
+        print(f"  🔍 [2/5] Re-measuring target at mid-altitude for sub-mm zeroing...")
+        final_xy = [target_mid[0], target_mid[1]]
+        mid_screws, _ = query_vision_screws()
+        if mid_screws:
+            nearest_s = min(mid_screws, key=lambda s: s['x_3d']**2 + s['y_3d']**2)
+            d_err = math.hypot(nearest_s['x_3d'], nearest_s['y_3d'])
+            print(f"    🎯 Detected screw right below camera: Cam=[{nearest_s['x_3d']:+.2f}, {nearest_s['y_3d']:+.2f}]mm (Residual Error={d_err:.2f}mm)")
+            if d_err < 35.0:
+                dx_corr = c_th * nearest_s['x_3d'] + s_th * nearest_s['y_3d']
+                dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
+                final_xy = [target_mid[0] + dx_corr, target_mid[1] + dy_corr]
+                print(f"    ✨ Zeroing residual offset: [ΔX_base={dx_corr:+.2f}, ΔY_base={dy_corr:+.2f}] mm")
+                target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+                controller.movel(target_mid_corrected, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
+                time.sleep(0.3)
+        else:
+            print(f"    ⚠️ No screw detected at mid-altitude, continuing...")
+
+        # 3. Final Linear Vertical Descent to 10mm clearance (Z = 65mm)
+        print(f"  🚀 [3/5] Vertical linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: {vel_desc_m_s*1000:.0f} mm/s)...")
+        target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        controller.movel(target_final_low, vel_m_s=vel_desc_m_s, acc_m_s2=acc_desc_m_s2, block=True)
+
+        # 4. Hover 1.5s and snapshot
+        print(f"  📸 [4/5] Hovering at 10mm clearance for 1.5s inspection...")
+        time.sleep(1.5)
+        try:
+            snap_req = urllib.request.Request("http://localhost:5000/api/snapshot", data=b"{}", headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(snap_req, timeout=2.0) as r:
+                res = json.loads(r.read().decode())
+                print(f"    📷 Snapshot saved: {res.get('filename')}")
+        except Exception as e:
+            print(f"    [WARN] Snapshot request failed: {e}")
+
+        # 5. Safe clearance vertical lift (Z = 100mm)
+        print(f"  ⚡ [5/5] Vertical lift to safe surface clearance (Z={LIFT_Z}mm)...")
+        target_lift_final = [final_xy[0], final_xy[1], LIFT_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        controller.movel(target_lift_final, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
+        time.sleep(0.2)
+
+        # 6. 3D Diagonal Linear Ascent Return to m4_view
+        print(f"  ⚡ 3D Diagonal Linear Ascent return to 'm4_view' (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(tcp_m4_view, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
+        time.sleep(0.3)
+        print(f"  ✅ Completed {label} diagonal inspection cycle!")
+
+    print("\n🎉 Diagonal Outer Screws sequence completed successfully!")
+    return True
+
 def main():
     parser = argparse.ArgumentParser(description="Duco-910 5-Step Robot Automation Pipeline")
-    parser.add_argument("action", choices=["status", "step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo", "clock_outer", "run_all"],
+    parser.add_argument("action", choices=["status", "step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo", "clock_outer", "step5_diag", "clock_diag", "run_all"],
                         help="Action to execute")
     parser.add_argument("--execute", action="store_true", help="Execute actual robot motion (default is dry-run for safety)")
     parser.add_argument("--target", type=int, default=None, help="Target screw index for visual servoing (0~6)")
@@ -562,6 +868,10 @@ def main():
             cmd_step5_visual_servoing(controller, target_screw_idx=args.target, execute=args.execute, speed_mult=speed_mult)
         elif args.action == "clock_outer":
             cmd_step5_clock_outer(controller, target_clock=args.target, execute=args.execute, speed_mult=speed_mult)
+        elif args.action == "step5_diag":
+            cmd_step5_diagonal_servo(controller, target_screw_idx=args.target, execute=args.execute, speed_mult=speed_mult)
+        elif args.action == "clock_diag":
+            cmd_step5_clock_diagonal(controller, target_clock=args.target, execute=args.execute, speed_mult=speed_mult)
         elif args.action == "run_all":
             print("\n🌟 Executing Complete 5-Step Pipeline Sequence:")
             if not cmd_step1_level_zero(controller, execute=args.execute, speed_mult=speed_mult): return
