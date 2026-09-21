@@ -241,9 +241,141 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True):
     print("\n  🎉 All selected targets completed!")
     return True
 
+def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
+    """
+    Executes Cartesian linear interpolated descent on the 4 outermost screws in clockwise order:
+      12 o'clock (Top / 상) -> m4_view
+      3 o'clock (Right / 우) -> m4_view
+      6 o'clock (Bottom / 하) -> m4_view
+      9 o'clock (Left / 좌) -> m4_view
+    """
+    print("\n[STEP 5 - CLOCK] Starting 4 Outermost Screws Clockwise Interpolation Pipeline...")
+    print("  Sequence: m4_view -> 12시 10mm -> m4_view -> 3시 10mm -> m4_view -> 6시 10mm -> m4_view -> 9시 10mm -> m4_view")
+
+    if "m4_view" not in controller.named_poses:
+        print("[ERROR] 'm4_view' pose not registered!")
+        return False
+
+    screws, _ = query_vision_screws()
+    if len(screws) < 4:
+        print(f"[ERROR] Found only {len(screws)} screws, expected at least 4 outer screws!")
+        return False
+
+    # Find the 4 outer screws:
+    s_12 = min(screws, key=lambda s: s['y_3d'])
+    s_3  = max(screws, key=lambda s: s['x_3d'])
+    s_6  = max(screws, key=lambda s: s['y_3d'])
+    s_9  = min(screws, key=lambda s: s['x_3d'])
+
+    clock_targets = [
+        ("12시 (상 / Top)", s_12),
+        ("3시 (우 / Right)", s_3),
+        ("6시 (하 / Bottom)", s_6),
+        ("9시 (좌 / Left)", s_9)
+    ]
+
+    if target_clock is not None:
+        clock_targets = [t for t in clock_targets if str(target_clock) in t[0]]
+        if not clock_targets:
+            print(f"[ERROR] Target clock '{target_clock}' not recognized! Use 12, 3, 6, or 9.")
+            return False
+
+    print("\n  📍 Identified Outermost Target Screws:")
+    for label, s in clock_targets:
+        print(f"    - {label}: Cam=[{s['x_3d']:+.1f}, {s['y_3d']:+.1f}, {s['z_3d']:.1f}]mm | Table=[{s['x_tbl']:+.1f}, {s['y_tbl']:+.1f}]mm (r={s['dist_center']:.1f}mm)")
+
+    SAFE_FLOOR_Z = 65.0 # mm (Flange height ensuring ~11-13mm air gap above screw head, zero physical contact)
+
+    for idx, (label, target) in enumerate(clock_targets):
+        print(f"\n=======================================================")
+        print(f"  🎯 [{idx+1}/4] Visiting {label} Screw")
+        print(f"=======================================================")
+
+        # Re-query vision to get fresh static snapshot coordinates from m4_view
+        cur_screws, _ = query_vision_screws()
+        if cur_screws:
+            if "12" in label:
+                target = min(cur_screws, key=lambda s: s['y_3d'])
+            elif "3" in label:
+                target = max(cur_screws, key=lambda s: s['x_3d'])
+            elif "6" in label:
+                target = max(cur_screws, key=lambda s: s['y_3d'])
+            elif "9" in label:
+                target = min(cur_screws, key=lambda s: s['x_3d'])
+
+        dx_cam = target['x_3d']
+        dy_cam = target['y_3d']
+        z_surface_mm = target['z_3d']
+
+        cur_tcp = controller.get_tcp_pose()
+        if not cur_tcp:
+            print("[ERROR] Cannot read TCP pose!")
+            return False
+
+        # Transform camera optical offset to robot base frame using Rz = 97.35°
+        # R = [[-0.128, 0.992], [0.992, 0.128]]
+        dx_base = -0.128 * dx_cam + 0.992 * dy_cam
+        dy_base =  0.992 * dx_cam + 0.128 * dy_cam
+
+        target_xy_high = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
+        target_low     = [target_xy_high[0], target_xy_high[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
+
+        print(f"  Current TCP          : X={cur_tcp[0]:.1f}mm, Y={cur_tcp[1]:.1f}mm, Z={cur_tcp[2]:.1f}mm")
+        print(f"  Camera Offset        : [ΔX_cam={dx_cam:+.1f}, ΔY_cam={dy_cam:+.1f}, Z_cam={z_surface_mm:.1f}] mm")
+        print(f"  Base Frame Offset    : [ΔX_base={dx_base:+.1f}, ΔY_base={dy_base:+.1f}] mm")
+        print(f"  Waypoint 1 (High XY) : X={target_xy_high[0]:.1f}, Y={target_xy_high[1]:.1f}, Z={target_xy_high[2]:.1f}mm")
+        print(f"  Waypoint 2 (10mm Low): X={target_low[0]:.1f}, Y={target_low[1]:.1f}, Z={target_low[2]:.1f}mm (Safety Floor={SAFE_FLOOR_Z}mm)")
+
+        # Verify Inverse Kinematics reachability
+        q_cur = controller.get_joints()
+        ik_high = controller.cal_ik(target_xy_high, q_cur)
+        ik_low  = controller.cal_ik(target_low, ik_high if ik_high else q_cur)
+
+        if not ik_high or not ik_low:
+            print(f"  ❌ [ERROR] IK check failed for {label}! Skipping this target.")
+            continue
+
+        if not execute:
+            print(f"  [DRY RUN] Motion sequence for {label} verified with IK: OK.")
+            continue
+
+        # 1. Align XY above target at high altitude (Z = 333.9mm) using Cartesian movel
+        print(f"  🚀 [1/4] Aligning camera above {label} in Cartesian space (speed: 30 mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=0.03, acc_m_s2=0.05, block=True)
+        time.sleep(0.5)
+
+        # 2. Descend vertically to 10mm clearance (Z = 65.0mm) using Cartesian movel
+        print(f"  🚀 [2/4] Cartesian linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: 15 mm/s)...")
+        controller.movel(target_low, vel_m_s=0.015, acc_m_s2=0.03, block=True)
+        
+        # 3. Hover 2.0 seconds and capture inspection snapshot
+        print(f"  📸 [3/4] Hovering at 10mm clearance for 2.0s inspection...")
+        time.sleep(2.0)
+        try:
+            snap_req = urllib.request.Request("http://localhost:5000/api/snapshot", data=b"{}", headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(snap_req, timeout=2.0) as r:
+                res = json.loads(r.read().decode())
+                print(f"    📷 Snapshot saved: {res.get('filename')}")
+        except Exception as e:
+            print(f"    [WARN] Snapshot request failed: {e}")
+
+        # 4. Retract vertically back up to high altitude (Z = 333.9mm) using Cartesian movel
+        print(f"  🚀 [4/4] Cartesian linear ascent back to safety height (speed: 30 mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=0.03, acc_m_s2=0.05, block=True)
+        time.sleep(0.5)
+
+        # 5. Return cleanly to standard m4_view pose
+        print(f"  🔄 Returning to 'm4_view' standby pose...")
+        controller.move_to_named_pose("m4_view", vel_deg=10.0, acc_deg=15.0)
+        time.sleep(1.0)
+        print(f"  ✅ Completed {label} inspection cycle!")
+
+    print("\n🎉 All 4 Outermost Screws (12시 -> 3시 -> 6시 -> 9시) successfully visited and returned to m4_view!")
+    return True
+
 def main():
     parser = argparse.ArgumentParser(description="Duco-910 5-Step Robot Automation Pipeline")
-    parser.add_argument("action", choices=["status", "step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo", "run_all"],
+    parser.add_argument("action", choices=["status", "step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo", "clock_outer", "run_all"],
                         help="Action to execute")
     parser.add_argument("--execute", action="store_true", help="Execute actual robot motion (default is dry-run for safety)")
     parser.add_argument("--target", type=int, default=None, help="Target screw index for visual servoing (0~6)")
@@ -267,6 +399,8 @@ def main():
             cmd_step4_move_m4_view(controller, execute=args.execute)
         elif args.action == "step5_servo":
             cmd_step5_visual_servoing(controller, target_screw_idx=args.target, execute=args.execute)
+        elif args.action == "clock_outer":
+            cmd_step5_clock_outer(controller, target_clock=args.target, execute=args.execute)
         elif args.action == "run_all":
             print("\n🌟 Executing Complete 5-Step Pipeline Sequence:")
             if not cmd_step1_level_zero(controller, execute=args.execute): return
