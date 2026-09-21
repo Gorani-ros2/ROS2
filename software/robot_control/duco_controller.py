@@ -183,11 +183,11 @@ class DucoController:
             time.sleep(0.2)
         return False
 
-    def movej(self, target_joints_deg, vel_deg=10.0, acc_deg=15.0, block=True):
+    def movej(self, target_joints_deg, vel_deg=20.0, acc_deg=30.0, block=True):
         """Move joints directly using movej. Safety clamped speed."""
-        # Safety velocity clamping: max 25 deg/s for test safety
-        v_clamped = min(float(vel_deg), 25.0)
-        a_clamped = min(float(acc_deg), 40.0)
+        # Safety velocity clamping: max 50 deg/s for agile test motion
+        v_clamped = min(float(vel_deg), 50.0)
+        a_clamped = min(float(acc_deg), 80.0)
         v_rad = math.radians(v_clamped)
         a_rad = math.radians(a_clamped)
 
@@ -200,10 +200,10 @@ class DucoController:
             self.wait_motion_done()
         return ret in (0, 4, 5) # 0: success, 4: ST_Finished, 5: ST_Interrupt
 
-    def movel(self, target_tcp_mm_deg, vel_m_s=0.03, acc_m_s2=0.05, block=True):
+    def movel(self, target_tcp_mm_deg, vel_m_s=0.06, acc_m_s2=0.10, block=True):
         """Move linear in Cartesian space using movel. Safety clamped speed."""
-        v_clamped = min(float(vel_m_s), 0.08) # max 80 mm/s
-        a_clamped = min(float(acc_m_s2), 0.15)
+        v_clamped = min(float(vel_m_s), 0.16) # max 160 mm/s
+        a_clamped = min(float(acc_m_s2), 0.30)
 
         p_in = (ctypes.c_double * 6)()
         p_in[0] = target_tcp_mm_deg[0] / 1000.0
@@ -218,10 +218,10 @@ class DucoController:
             self.wait_motion_done()
         return ret in (0, 4, 5)
 
-    def tcp_move(self, offset_mm_deg, vel_m_s=0.03, acc_m_s2=0.05, block=True):
+    def tcp_move(self, offset_mm_deg, vel_m_s=0.06, acc_m_s2=0.10, block=True):
         """Move relative in Tool frame [dx_mm, dy_mm, dz_mm, drx_deg, dry_deg, drz_deg]."""
-        v_clamped = min(float(vel_m_s), 0.08)
-        a_clamped = min(float(acc_m_s2), 0.15)
+        v_clamped = min(float(vel_m_s), 0.16)
+        a_clamped = min(float(acc_m_s2), 0.30)
         off_in = (ctypes.c_double * 6)()
         off_in[0] = offset_mm_deg[0] / 1000.0
         off_in[1] = offset_mm_deg[1] / 1000.0
@@ -285,7 +285,7 @@ class DucoController:
         print(f"[DucoController] Successfully registered 'm4_view' pose: {self.named_poses['m4_view']}")
         return True, self.named_poses["m4_view"]
 
-    def move_to_named_pose(self, name, vel_deg=8.0, acc_deg=12.0):
+    def move_to_named_pose(self, name, vel_deg=20.0, acc_deg=30.0):
         """Move to a registered named pose ('folded_home', 'm4_view', etc.)"""
         if name not in self.named_poses:
             print(f"[DucoController] Error: Named pose '{name}' not found")
