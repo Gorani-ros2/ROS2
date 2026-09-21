@@ -85,8 +85,8 @@ def cmd_step1_level_zero(controller, execute=True):
         print("[DRY RUN] Motion planned successfully. Run with --execute to move robot.")
         return True
 
-    print("  🚀 Executing gentle leveling motion (speed: 6.0 deg/s)...")
-    success = controller.movej(q_target, vel_deg=6.0, acc_deg=10.0, block=True)
+    print("  🚀 Executing leveling motion (speed: 15.0 deg/s)...")
+    success = controller.movej(q_target, vel_deg=15.0, acc_deg=25.0, block=True)
     if success:
         time.sleep(0.5)
         new_tcp = controller.get_tcp_pose()
@@ -127,8 +127,8 @@ def cmd_step3_move_home(controller, execute=True):
         print("[DRY RUN] Trajectory ready. Run with --execute to move robot.")
         return True
 
-    print("  🚀 Moving smoothly to folded home pose (speed: 10.0 deg/s)...")
-    success = controller.move_to_named_pose("folded_home", vel_deg=10.0, acc_deg=15.0)
+    print("  🚀 Moving smoothly to folded home pose (speed: 20.0 deg/s)...")
+    success = controller.move_to_named_pose("folded_home", vel_deg=20.0, acc_deg=30.0)
     if success:
         time.sleep(0.5)
         new_q = controller.get_joints()
@@ -156,8 +156,8 @@ def cmd_step4_move_m4_view(controller, execute=True):
         print("[DRY RUN] Trajectory ready. Run with --execute to move robot.")
         return True
 
-    print("  🚀 Moving to 'm4_view' pose (speed: 10.0 deg/s)...")
-    success = controller.move_to_named_pose("m4_view", vel_deg=10.0, acc_deg=15.0)
+    print("  🚀 Moving to 'm4_view' pose (speed: 20.0 deg/s)...")
+    success = controller.move_to_named_pose("m4_view", vel_deg=20.0, acc_deg=30.0)
     if success:
         time.sleep(0.5)
         new_tcp = controller.get_tcp_pose()
@@ -202,39 +202,63 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True):
         # Safe Waypoint 1: Hover above target at safety height (Z = current view height, e.g. 334mm)
         # In tool frame with camera facing down:
         # moving camera by dx_cam, dy_cam aligns the optical axis directly over the screw!
-        # Hard Safety Floor: Table surface is at Base Z ~42mm. Never descend below Base Z = 52mm.
-        MIN_SAFE_BASE_Z = 52.0 # mm
+        SAFE_FLOOR_Z = 65.0 # mm (Flange height ensuring ~11-13mm air gap above screw head, zero physical contact)
         cur_tcp = controller.get_tcp_pose()
         if not cur_tcp:
             print("[ERROR] Cannot read TCP pose before descent!")
             continue
-        max_safe_descent = max(0.0, cur_tcp[2] - MIN_SAFE_BASE_Z)
-        descent_dist_mm = min(max(0.0, z_surface_mm - 10.0), max_safe_descent)
 
-        print(f"     Waypoint 1 (XY Align)   : Offset [ΔX={dx_cam:+.1f}, ΔY={dy_cam:+.1f}] mm")
-        print(f"     Waypoint 2 (10mm Height): Descend by {descent_dist_mm:.1f} mm -> Base Z={(cur_tcp[2] - descent_dist_mm):.1f}mm (10mm clearance)")
+        # Transform camera optical offset to robot base frame using Rz = 97.35°
+        # R = [[-0.128, 0.992], [0.992, 0.128]]
+        dx_base = -0.128 * dx_cam + 0.992 * dy_cam
+        dy_base =  0.992 * dx_cam + 0.128 * dy_cam
+
+        target_xy_high = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
+        target_low     = [target_xy_high[0], target_xy_high[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
+
+        print(f"     Waypoint 1 (High XY) : X={target_xy_high[0]:.1f}mm, Y={target_xy_high[1]:.1f}mm, Z={target_xy_high[2]:.1f}mm")
+        print(f"     Waypoint 2 (10mm Low): X={target_low[0]:.1f}mm, Y={target_low[1]:.1f}mm, Z={target_low[2]:.1f}mm (Safety Floor={SAFE_FLOOR_Z}mm)")
+
+        q_cur = controller.get_joints()
+        ik_high = controller.cal_ik(target_xy_high, q_cur)
+        ik_low  = controller.cal_ik(target_low, ik_high if ik_high else q_cur)
+
+        if not ik_high or not ik_low:
+            print(f"     ❌ [ERROR] IK check failed for Target #{i+1}! Skipping.")
+            continue
 
         if not execute:
             print(f"     [DRY RUN] Motion sequence for Target #{i+1} verified.")
             continue
 
-        # Execute Waypoint 1: XY Align over screw center
-        print(f"     🚀 [1/3] Aligning XY above screw (speed: 30 mm/s)...")
-        controller.tcp_move([dx_cam, dy_cam, 0.0, 0.0, 0.0, 0.0], vel_m_s=0.03, acc_m_s2=0.05, block=True)
-        time.sleep(0.5)
+        # Execute Waypoint 1: High XY Align in Cartesian space
+        print(f"     🚀 [1/4] Aligning XY above screw (speed: 60 mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        time.sleep(0.3)
 
-        # Execute Waypoint 2: Descend along Tool +Z to 10mm clearance
-        print(f"     🚀 [2/3] Descending to 10mm clearance (speed: 20 mm/s)...")
-        controller.tcp_move([0.0, 0.0, descent_dist_mm, 0.0, 0.0, 0.0], vel_m_s=0.02, acc_m_s2=0.04, block=True)
-        time.sleep(2.0) # Hover 2 seconds for close-up inspection
+        # Execute Waypoint 2: Cartesian Linear Descent to 10mm clearance (Z=65.0mm)
+        print(f"     🚀 [2/4] Cartesian linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: 30 mm/s)...")
+        controller.movel(target_low, vel_m_s=0.03, acc_m_s2=0.06, block=True)
+        
+        # Execute Waypoint 3: Hover 1.5s and capture snapshot
+        print(f"     📸 [3/4] Hovering at 10mm clearance for 1.5s inspection...")
+        time.sleep(1.5)
+        try:
+            snap_req = urllib.request.Request("http://localhost:5000/api/snapshot", data=b"{}", headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(snap_req, timeout=2.0) as r:
+                res = json.loads(r.read().decode())
+                print(f"       📷 Snapshot saved: {res.get('filename')}")
+        except Exception as e:
+            pass
 
-        # Execute Waypoint 3: Retract back up to safety height
-        print(f"     🚀 [3/3] Retracting back up to safety height...")
-        controller.tcp_move([0.0, 0.0, -descent_dist_mm, 0.0, 0.0, 0.0], vel_m_s=0.03, acc_m_s2=0.05, block=True)
-        time.sleep(0.5)
+        # Execute Waypoint 4: Retract vertically back up to safety height
+        print(f"     🚀 [4/4] Cartesian linear ascent back to safety height (speed: 60 mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        time.sleep(0.3)
 
         # Reset cleanly to standard m4_view pose to prevent cumulative drift
-        controller.move_to_named_pose("m4_view", vel_deg=10.0, acc_deg=15.0)
+        print(f"     🔄 Returning to 'm4_view' standby pose (speed: 20.0 deg/s)...")
+        controller.move_to_named_pose("m4_view", vel_deg=20.0, acc_deg=30.0)
         time.sleep(0.5)
         print(f"     ✅ Completed inspection of Target #{i+1}!")
 
@@ -340,17 +364,17 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
             continue
 
         # 1. Align XY above target at high altitude (Z = 333.9mm) using Cartesian movel
-        print(f"  🚀 [1/4] Aligning camera above {label} in Cartesian space (speed: 30 mm/s)...")
-        controller.movel(target_xy_high, vel_m_s=0.03, acc_m_s2=0.05, block=True)
-        time.sleep(0.5)
+        print(f"  🚀 [1/4] Aligning camera above {label} in Cartesian space (speed: 60 mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        time.sleep(0.3)
 
         # 2. Descend vertically to 10mm clearance (Z = 65.0mm) using Cartesian movel
-        print(f"  🚀 [2/4] Cartesian linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: 15 mm/s)...")
-        controller.movel(target_low, vel_m_s=0.015, acc_m_s2=0.03, block=True)
+        print(f"  🚀 [2/4] Cartesian linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: 30 mm/s)...")
+        controller.movel(target_low, vel_m_s=0.03, acc_m_s2=0.06, block=True)
         
-        # 3. Hover 2.0 seconds and capture inspection snapshot
-        print(f"  📸 [3/4] Hovering at 10mm clearance for 2.0s inspection...")
-        time.sleep(2.0)
+        # 3. Hover 1.5 seconds and capture inspection snapshot
+        print(f"  📸 [3/4] Hovering at 10mm clearance for 1.5s inspection...")
+        time.sleep(1.5)
         try:
             snap_req = urllib.request.Request("http://localhost:5000/api/snapshot", data=b"{}", headers={'Content-Type': 'application/json'})
             with urllib.request.urlopen(snap_req, timeout=2.0) as r:
@@ -360,14 +384,14 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
             print(f"    [WARN] Snapshot request failed: {e}")
 
         # 4. Retract vertically back up to high altitude (Z = 333.9mm) using Cartesian movel
-        print(f"  🚀 [4/4] Cartesian linear ascent back to safety height (speed: 30 mm/s)...")
-        controller.movel(target_xy_high, vel_m_s=0.03, acc_m_s2=0.05, block=True)
-        time.sleep(0.5)
+        print(f"  🚀 [4/4] Cartesian linear ascent back to safety height (speed: 60 mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        time.sleep(0.3)
 
         # 5. Return cleanly to standard m4_view pose
-        print(f"  🔄 Returning to 'm4_view' standby pose...")
-        controller.move_to_named_pose("m4_view", vel_deg=10.0, acc_deg=15.0)
-        time.sleep(1.0)
+        print(f"  🔄 Returning to 'm4_view' standby pose (speed: 20.0 deg/s)...")
+        controller.move_to_named_pose("m4_view", vel_deg=20.0, acc_deg=30.0)
+        time.sleep(0.5)
         print(f"  ✅ Completed {label} inspection cycle!")
 
     print("\n🎉 All 4 Outermost Screws (12시 -> 3시 -> 6시 -> 9시) successfully visited and returned to m4_view!")
