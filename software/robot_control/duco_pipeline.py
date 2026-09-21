@@ -152,9 +152,13 @@ def cmd_step4_move_m4_view(controller, execute=True):
     print(f"  Target Joints : {target_q}")
     print(f"  Joint Deltas  : {deltas} (Max={max(deltas)}°)")
 
-    if not execute:
-        print("[DRY RUN] Trajectory ready. Run with --execute to move robot.")
-        return True
+    cur_tcp = controller.get_tcp_pose()
+    if cur_tcp and cur_tcp[2] < 150.0:
+        print(f"  ⚠️ Low altitude detected (Z={cur_tcp[2]:.1f}mm < 150mm). Executing vertical linear liftoff first...")
+        target_lift = [cur_tcp[0], cur_tcp[1], 150.0, 180.0, 0.0, cur_tcp[5]]
+        if execute:
+            controller.movel(target_lift, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+            time.sleep(0.3)
 
     print("  🚀 Moving to 'm4_view' pose (speed: 20.0 deg/s)...")
     success = controller.move_to_named_pose("m4_view", vel_deg=20.0, acc_deg=30.0)
