@@ -380,32 +380,19 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-                    <label style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: block;">5️⃣ 외곽 M4 나사 10mm 초정밀 2단계 접근 (30cm 상공 → 8.5cm 근접재보정 → 10mm)</label>
-                    <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
-                        <button class="btn btn-primary" onclick="runClockServo(12)">🕛 12시 (상) 10mm</button>
-                        <button class="btn btn-primary" onclick="runClockServo(3)">🕒 3시 (우) 10mm</button>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-size: 12px; color: #c084fc; font-weight: 700; display: block;">5️⃣ 지능형 최근접 이웃 (Nearest-Neighbor) 연속 순회</label>
+                        <span style="font-size: 10px; background: rgba(168,85,247,0.25); color: #e9d5ff; padding: 2px 6px; border-radius: 4px; font-weight: 600;">3D 대각 + 100mm 횡이동</span>
                     </div>
-                    <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
-                        <button class="btn btn-primary" onclick="runClockServo(6)">🕕 6시 (하) 10mm</button>
-                        <button class="btn btn-primary" onclick="runClockServo(9)">🕘 9시 (좌) 10mm</button>
-                    </div>
-                    <button class="btn btn-success" style="width: 100%; margin-top: 4px;" onclick="runClockServo('all')">🔄 4개 외곽 직각 순차 주행 (12시→3시→6시→9시)</button>
-                </div>
-
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <label style="font-size: 12px; color: #c084fc; font-weight: 600; display: block;">⚡ 3D 대각선 고속 주행 모드 (Diagonal Interpolation)</label>
-                        <span style="font-size: 10px; background: rgba(168,85,247,0.2); color: #e9d5ff; padding: 2px 6px; border-radius: 4px;">대각하강+수직이탈+대각복귀</span>
-                    </div>
-                    <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
-                        <button class="btn btn-purple" onclick="runClockDiag(12)">⚡ 12시 대각 10mm</button>
-                        <button class="btn btn-purple" onclick="runClockDiag(3)">⚡ 3시 대각 10mm</button>
-                    </div>
-                    <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
-                        <button class="btn btn-purple" onclick="runClockDiag(6)">⚡ 6시 대각 10mm</button>
-                        <button class="btn btn-purple" onclick="runClockDiag(9)">⚡ 9시 대각 10mm</button>
-                    </div>
-                    <button class="btn btn-purple" style="width: 100%; margin-top: 4px; border: 1px solid #c084fc; font-weight: 600;" onclick="runClockDiag('all')">⚡ 4개 외곽 대각 순차 주행 (12시→3시→6시→9시)</button>
+                    <button class="btn btn-success" style="width: 100%; margin-bottom: 6px; font-weight: 600; padding: 9px 12px;" onclick="runRobot('nn_center')">
+                        ⚡ 중심 우선 최근접 연속 순회 (Center-First NN)
+                    </button>
+                    <button class="btn btn-purple" style="width: 100%; margin-bottom: 6px; font-weight: 600; padding: 9px 12px;" onclick="runRobot('nn_sweep')">
+                        ⚡ 외곽 스위프 최근접 연속 순회 (Corner-Sweep NN)
+                    </button>
+                    <button class="btn btn-primary" style="width: 100%; font-weight: 600; padding: 8px 12px;" onclick="runRobot('single_servo')">
+                        🎯 중심 최인접 1개 단일 접근 (Single 10mm)
+                    </button>
                 </div>
                 <div id="robot-msg" style="font-size: 12px; color: #38bdf8; margin-top: 8px; min-height: 18px; word-break: break-word;"></div>
             </div>
@@ -493,52 +480,6 @@ HTML_TEMPLATE = """
             badge.style.background = '#d97706';
             msg.textContent = `🚀 로봇 [${action}] 실행 중...`;
             fetch(`/api/robot/${action}`, { method: 'POST' })
-                .then(r => r.json())
-                .then(d => {
-                    msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '완료' : '실패'));
-                    badge.textContent = d.success ? 'READY' : 'ERROR';
-                    badge.style.background = d.success ? '#15803d' : '#dc2626';
-                    updateRobotStatus();
-                })
-                .catch(e => {
-                    msg.textContent = '❌ 통신 오류: ' + e;
-                    badge.textContent = 'ERROR';
-                    badge.style.background = '#dc2626';
-                });
-        }
-
-        function runClockServo(target) {
-            const msg = document.getElementById('robot-msg');
-            const badge = document.getElementById('robot-badge');
-            badge.textContent = 'RUNNING';
-            badge.style.background = '#d97706';
-            const label = target === 'all' ? '시계방향 4개 전체 순차 주행' : `${target}시 외곽 나사`;
-            msg.textContent = `🚀 [${label}] 10mm 안전 접근 실행 중... (안전높이 Z=65.0mm)`;
-            const url = target === 'all' ? '/api/robot/clock_outer' : `/api/robot/clock_outer?target=${target}`;
-            fetch(url, { method: 'POST' })
-                .then(r => r.json())
-                .then(d => {
-                    msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '완료' : '실패'));
-                    badge.textContent = d.success ? 'READY' : 'ERROR';
-                    badge.style.background = d.success ? '#15803d' : '#dc2626';
-                    updateRobotStatus();
-                })
-                .catch(e => {
-                    msg.textContent = '❌ 통신 오류: ' + e;
-                    badge.textContent = 'ERROR';
-                    badge.style.background = '#dc2626';
-                });
-        }
-
-        function runClockDiag(target) {
-            const msg = document.getElementById('robot-msg');
-            const badge = document.getElementById('robot-badge');
-            badge.textContent = 'RUNNING';
-            badge.style.background = '#d97706';
-            const label = target === 'all' ? '4개 외곽 대각 순차 주행' : `${target}시 외곽 대각 10mm`;
-            msg.textContent = `⚡ [${label}] 3D 대각선 고속 주행 실행 중... (안전높이 Z=65.0mm)`;
-            const url = target === 'all' ? '/api/robot/clock_diag' : `/api/robot/clock_diag?target=${target}`;
-            fetch(url, { method: 'POST' })
                 .then(r => r.json())
                 .then(d => {
                     msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '완료' : '실패'));
@@ -800,13 +741,10 @@ def api_robot_status():
 
 @app.route('/api/robot/<action>', methods=['POST'])
 def api_robot_action(action):
-    if action not in ["step1_level", "step2_set_view", "step3_home", "step4_view", "step5_servo", "clock_outer", "step5_diag", "clock_diag"]:
+    if action not in ["step1_level", "step2_set_view", "step3_home", "step4_view", "nn_center", "nn_sweep", "single_servo"]:
         return jsonify({"success": False, "error": f"Invalid action: {action}"}), 400
     
-    target = request.args.get('target', default=None)
     cmd = ["python3", "/home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py", action, "--execute"]
-    if target is not None and target != "all":
-        cmd.extend(["--target", str(target)])
 
     # Inject active speed multiplier
     speed_mult = 2.0
@@ -820,9 +758,9 @@ def api_robot_action(action):
 
     import subprocess
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
         out = proc.stdout.strip()
-        lines = [line.strip() for line in out.split('\n') if 'Arrived' in line or '✅' in line or 'ERROR' in line or 'Completed' in line or 'Leveled' in line]
+        lines = [line.strip() for line in out.split('\n') if 'Arrived' in line or '✅' in line or 'ERROR' in line or 'Completed' in line or 'Leveled' in line or 'inspected' in line or 'Tour' in line]
         summary = lines[-1] if lines else "명령 완료"
         return jsonify({"success": proc.returncode == 0, "message": summary, "log": out})
     except Exception as e:
