@@ -73,40 +73,59 @@ def cmd_status(controller):
     return st
 
 def cmd_step1_level_zero(controller, execute=True, speed_mult=2.0):
-    """Step 1: Level robot TCP orientation to exact perpendicular (0.0° tilt)."""
+    """Step 1: Level robot TCP orientation to 0° perpendicular relative to workpiece table using D405 plane measurement."""
     scale = speed_mult / 2.0
-    vel_deg = min(15.0 * scale, 45.0)
-    acc_deg = min(25.0 * scale, 60.0)
-    print(f"\n[STEP 1] Leveling Robot TCP Orientation to 0° Perpendicular (speed: {vel_deg:.1f} deg/s)...")
+    vel_deg = min(10.0 * scale, 30.0)
+    acc_deg = min(15.0 * scale, 45.0)
+    print(f"\n[STEP 1] Camera-Referenced Table Leveling (Target Tilt: 0.0° / 0.0°, speed: {vel_deg:.1f} deg/s)...")
     tcp = controller.get_tcp_pose()
     if not tcp:
         print("[ERROR] Could not read robot TCP pose!")
         return False
 
-    # Rx = -180.0° (straight down), Ry = 0.0° (level)
-    target_tcp = [tcp[0], tcp[1], tcp[2], -180.0, 0.0, tcp[5]]
+    # Query live camera tilt from vision API
+    _, v_meta = query_vision_screws()
+    target_rx, target_ry = 178.22, -0.70  # Calibrated physical table-perpendicular orientation
+    if v_meta and "pitch_deg" in v_meta and "roll_deg" in v_meta:
+        cur_pitch = v_meta["pitch_deg"]
+        cur_roll = v_meta["roll_deg"]
+        print(f"  📷 Live D405 Table Tilt Measurement: Pitch = {cur_pitch:+.2f}°, Roll = {cur_roll:+.2f}°")
+        # Dynamic closed-loop adjustment: Δpitch = -1.006 * ΔRx, Δroll = -0.926 * ΔRy
+        d_rx = -(cur_pitch / 1.006)
+        d_ry = +(cur_roll / 0.926)
+        target_rx = round(tcp[3] + d_rx, 2)
+        target_ry = round(tcp[4] + d_ry, 2)
+        print(f"  🎯 Calculated Camera-Perpendicular Orientation: Rx = {target_rx}°, Ry = {target_ry}° (Residual Tilt -> 0.00°)")
+    else:
+        print(f"  ℹ️ Vision API offline; using calibrated table normal: Rx={target_rx}°, Ry={target_ry}°")
+
+    target_tcp = [tcp[0], tcp[1], tcp[2], target_rx, target_ry, tcp[5]]
     q_cur = controller.get_joints()
-    q_target = controller.cal_ik(target_tcp)
+    q_target = controller.cal_ik(target_tcp, q_cur)
     
     if not q_target:
         print("[ERROR] Inverse kinematics computation failed!")
         return False
 
     deltas = [round(abs(q_target[i] - q_cur[i]), 2) for i in range(6)]
-    print(f"  Current TCP : X={tcp[0]:.1f}mm, Y={tcp[1]:.1f}mm, Z={tcp[2]:.1f}mm | Rx={tcp[3]:.1f}°, Ry={tcp[4]:.1f}°, Rz={tcp[5]:.1f}°")
-    print(f"  Target TCP  : X={target_tcp[0]:.1f}mm, Y={target_tcp[1]:.1f}mm, Z={target_tcp[2]:.1f}mm | Rx=-180.0°, Ry=0.0°, Rz={tcp[5]:.1f}°")
+    print(f"  Current TCP : X={tcp[0]:.1f}mm, Y={tcp[1]:.1f}mm, Z={tcp[2]:.1f}mm | Rx={tcp[3]:.2f}°, Ry={tcp[4]:.2f}°, Rz={tcp[5]:.2f}°")
+    print(f"  Target TCP  : X={target_tcp[0]:.1f}mm, Y={target_tcp[1]:.1f}mm, Z={target_tcp[2]:.1f}mm | Rx={target_rx}°, Ry={target_ry}°, Rz={tcp[5]:.2f}°")
     print(f"  Joint Deltas: {deltas} (Max={max(deltas)}°)")
 
     if not execute:
         print("[DRY RUN] Motion planned successfully. Run with --execute to move robot.")
         return True
 
-    print(f"  🚀 Executing leveling motion (speed: {vel_deg:.1f} deg/s)...")
+    print(f"  🚀 Executing camera-referenced leveling motion (speed: {vel_deg:.1f} deg/s)...")
     success = controller.movej(q_target, vel_deg=vel_deg, acc_deg=acc_deg, block=True)
     if success:
-        time.sleep(0.5)
+        time.sleep(1.0)
         new_tcp = controller.get_tcp_pose()
-        print(f"  ✅ Leveled Successfully! New TCP: Rx={new_tcp[3]:.2f}°, Ry={new_tcp[4]:.2f}°, Z={new_tcp[2]:.1f}mm")
+        _, new_meta = query_vision_screws()
+        tilt_str = ""
+        if new_meta and "pitch_deg" in new_meta:
+            tilt_str = f" | New Camera Tilt: P={new_meta['pitch_deg']:+.2f}°, R={new_meta['roll_deg']:+.2f}°"
+        print(f"  ✅ Camera Leveled Successfully! TCP: Rx={new_tcp[3]:.2f}°, Ry={new_tcp[4]:.2f}°{tilt_str}")
         return True
     else:
         print("  ❌ Movement command returned failure!")
@@ -255,9 +274,9 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True, s
         MID_Z = 130.0       # mm (Closest reliable recognition height: ~8.5cm above table, >7cm D405 blind limit)
         SAFE_FLOOR_Z = 65.0  # mm (Flange height ensuring ~11-13mm air gap above screw head, zero physical contact)
 
-        target_xy_high = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
-        target_mid     = [target_xy_high[0], target_xy_high[1], MID_Z, 180.0, 0.0, cur_tcp[5]]
-        target_low     = [target_xy_high[0], target_xy_high[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
+        target_xy_high = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, cur_tcp[2], cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_mid     = [target_xy_high[0], target_xy_high[1], MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_low     = [target_xy_high[0], target_xy_high[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
 
         print(f"     Waypoint 1 (High XY)  : X={target_xy_high[0]:.1f}mm, Y={target_xy_high[1]:.1f}mm, Z={target_xy_high[2]:.1f}mm")
         print(f"     Waypoint 2 (Mid Recog): X={target_mid[0]:.1f}mm, Y={target_mid[1]:.1f}mm, Z={target_mid[2]:.1f}mm (~8.5cm height)")
@@ -299,7 +318,7 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True, s
                 dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
                 final_xy = [target_mid[0] + dx_corr, target_mid[1] + dy_corr]
                 print(f"       ✨ Zeroing residual offset: [ΔX_base={dx_corr:+.2f}, ΔY_base={dy_corr:+.2f}] mm")
-                target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, 180.0, 0.0, cur_tcp[5]]
+                target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
                 controller.movel(target_mid_corrected, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
                 time.sleep(0.3)
         else:
@@ -307,7 +326,7 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True, s
 
         # Execute Waypoint 4: Cartesian Linear Descent to 10mm clearance (Z=65.0mm)
         print(f"     🚀 [4/5] Cartesian linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: {vel_desc_m_s*1000:.0f} mm/s)...")
-        target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
+        target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
         controller.movel(target_final_low, vel_m_s=vel_desc_m_s, acc_m_s2=acc_desc_m_s2, block=True)
         
         # Execute Waypoint 5: Hover 1.5s and capture snapshot
@@ -323,7 +342,7 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True, s
 
         # Execute Waypoint 6: Retract vertically back up to safety height
         print(f"     🚀 Retracting vertically back up to safety height (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
-        target_retract = [final_xy[0], final_xy[1], cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
+        target_retract = [final_xy[0], final_xy[1], cur_tcp[2], cur_tcp[3], cur_tcp[4], cur_tcp[5]]
         controller.movel(target_retract, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.3)
 
@@ -426,11 +445,11 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True, speed_mul
         MID_Z = 130.0       # mm (Closest reliable recognition height: ~8.5cm above table, >7cm D405 blind limit)
         SAFE_FLOOR_Z = 65.0  # mm (Flange height ensuring ~11-13mm air gap above screw head, zero physical contact)
 
-        target_xy_high = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
-        target_mid     = [target_xy_high[0], target_xy_high[1], MID_Z, 180.0, 0.0, cur_tcp[5]]
-        target_low     = [target_xy_high[0], target_xy_high[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
+        target_xy_high = [cur_tcp[0] + dx_base, cur_tcp[1] + dy_base, cur_tcp[2], cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_mid     = [target_xy_high[0], target_xy_high[1], MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
+        target_low     = [target_xy_high[0], target_xy_high[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
 
-        print(f"  Current TCP            : X={cur_tcp[0]:.1f}mm, Y={cur_tcp[1]:.1f}mm, Z={cur_tcp[2]:.1f}mm")
+        print(f"  Current TCP            : X={cur_tcp[0]:.1f}mm, Y={cur_tcp[1]:.1f}mm, Z={cur_tcp[2]:.1f}mm | Rx={cur_tcp[3]:.2f}°, Ry={cur_tcp[4]:.2f}°")
         print(f"  Camera Offset (30cm)   : [ΔX_cam={dx_cam:+.1f}, ΔY_cam={dy_cam:+.1f}, Z_cam={z_surface_mm:.1f}] mm")
         print(f"  Base Frame Offset      : [ΔX_base={dx_base:+.1f}, ΔY_base={dy_base:+.1f}] mm")
         print(f"  Waypoint 1 (High XY)   : X={target_xy_high[0]:.1f}, Y={target_xy_high[1]:.1f}, Z={target_xy_high[2]:.1f}mm")
@@ -474,7 +493,7 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True, speed_mul
                 dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
                 final_xy = [target_mid[0] + dx_corr, target_mid[1] + dy_corr]
                 print(f"    ✨ Zeroing residual offset: [ΔX_base={dx_corr:+.2f}, ΔY_base={dy_corr:+.2f}] mm")
-                target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, 180.0, 0.0, cur_tcp[5]]
+                target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
                 controller.movel(target_mid_corrected, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
                 time.sleep(0.3)
         else:
@@ -482,7 +501,7 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True, speed_mul
 
         # 4. Final Linear Descent to 10mm Clearance (Z = 65.0mm)
         print(f"  🚀 [4/5] Final linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: {vel_desc_m_s*1000:.0f} mm/s)...")
-        target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
+        target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, cur_tcp[3], cur_tcp[4], cur_tcp[5]]
         controller.movel(target_final_low, vel_m_s=vel_desc_m_s, acc_m_s2=acc_desc_m_s2, block=True)
         
         # 5. Hover 1.5 seconds and capture inspection snapshot
@@ -498,7 +517,7 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True, speed_mul
 
         # 6. Retract vertically back up to high altitude (Z = 333.9mm) using Cartesian movel
         print(f"  🚀 Retracting vertically back to safety height (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
-        target_retract = [final_xy[0], final_xy[1], cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
+        target_retract = [final_xy[0], final_xy[1], cur_tcp[2], cur_tcp[3], cur_tcp[4], cur_tcp[5]]
         controller.movel(target_retract, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.3)
 
