@@ -22,6 +22,7 @@ import argparse
 import threading
 import numpy as np
 import cv2
+import json
 
 try:
     import pyrealsense2 as rs
@@ -348,7 +349,25 @@ HTML_TEMPLATE = """
                     <span id="robot-badge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: #15803d; color: #fff;">READY</span>
                 </div>
                 <div id="robot-status-text" style="font-size: 12px; color: var(--text-dim); margin-bottom: 12px;">
-                    TCP: <span id="robot-tcp" style="color: #f1f5f9; font-family: monospace;">[-476.4, 63.8, 333.9]</span> | Tilt: <span id="robot-tilt" style="color: #22c55e;">0.0°</span>
+                    TCP: <span id="robot-tcp" style="color: #f1f5f9; font-family: monospace;">[-555.9, -10.3, 333.9]</span> | Tilt: <span id="robot-tilt" style="color: #22c55e;">0.0°</span>
+                </div>
+
+                <!-- Robot Speed Multiplier Control Card -->
+                <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #38bdf8;">⚡ 로봇 속도 배율 제어</span>
+                        <span id="speed-badge" style="font-size: 12px; font-weight: 700; color: #f59e0b;">2.0x [표준]</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        <input type="range" id="speed-slider" min="0.5" max="3.5" step="0.5" value="2.0" style="flex: 1; accent-color: #38bdf8; cursor: pointer;" oninput="onSpeedSlider(this.value)">
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;">
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(1.0)">🐢 1.0x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(1.5)">1.5x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(2.0)">⚡ 2.0x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(2.5)">2.5x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(3.0)">🚀 3.0x</button>
+                    </div>
                 </div>
 
                 <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 8px;">
@@ -495,6 +514,45 @@ HTML_TEMPLATE = """
                 });
         }
 
+        function getSpeedDesc(val) {
+            const v = parseFloat(val);
+            if (v <= 1.0) return ' [거북이]';
+            if (v <= 1.5) return ' [안전]';
+            if (v <= 2.0) return ' [표준]';
+            if (v <= 2.5) return ' [쾌속]';
+            return ' [고속]';
+        }
+
+        function onSpeedSlider(val) {
+            const num = parseFloat(val).toFixed(1);
+            document.getElementById('speed-badge').innerText = num + 'x' + getSpeedDesc(num);
+            fetch('/api/robot/speed', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ speed_mult: parseFloat(num) })
+            }).then(r => r.json()).catch(() => {});
+        }
+
+        function setSpeed(val) {
+            const slider = document.getElementById('speed-slider');
+            if (slider) slider.value = val;
+            onSpeedSlider(val);
+        }
+
+        function initSpeed() {
+            fetch('/api/robot/speed')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.speed_mult) {
+                        const num = parseFloat(d.speed_mult).toFixed(1);
+                        const slider = document.getElementById('speed-slider');
+                        if (slider) slider.value = num;
+                        document.getElementById('speed-badge').innerText = num + 'x' + getSpeedDesc(num);
+                    }
+                })
+                .catch(() => {});
+        }
+
         function updateRobotStatus() {
             fetch('/api/robot/status')
                 .then(r => r.json())
@@ -550,6 +608,11 @@ HTML_TEMPLATE = """
                 })
                 .catch(() => {});
         }, 300);
+
+        // Initial setup on load
+        initSpeed();
+        updateRobotStatus();
+        setInterval(updateRobotStatus, 1500);
     </script>
 </body>
 </html>
@@ -650,6 +713,31 @@ def api_snapshot():
 # ==============================================================================
 # Robot Automation Endpoints (Duco-910 Web Telemetry & Control Bridge)
 # ==============================================================================
+SPEED_CONFIG_PATH = "/home/knu/workspaces/duco_ros2_control_ws/config/duco_speed.json"
+
+@app.route('/api/robot/speed', methods=['GET', 'POST'])
+def api_robot_speed():
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        val = data.get('speed_mult', request.args.get('speed_mult', 2.0))
+        try:
+            val = max(0.5, min(float(val), 3.5))
+            os.makedirs(os.path.dirname(SPEED_CONFIG_PATH), exist_ok=True)
+            with open(SPEED_CONFIG_PATH, 'w', encoding='utf-8') as f:
+                json.dump({"speed_mult": val}, f)
+            return jsonify({"success": True, "speed_mult": val})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+    else:
+        val = 2.0
+        if os.path.exists(SPEED_CONFIG_PATH):
+            try:
+                with open(SPEED_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                    val = float(json.load(f).get("speed_mult", 2.0))
+            except Exception:
+                pass
+        return jsonify({"speed_mult": val})
+
 @app.route('/api/robot/status')
 def api_robot_status():
     import subprocess
@@ -680,6 +768,16 @@ def api_robot_action(action):
     cmd = ["python3", "/home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py", action, "--execute"]
     if target is not None and target != "all":
         cmd.extend(["--target", str(target)])
+
+    # Inject active speed multiplier
+    speed_mult = 2.0
+    if os.path.exists(SPEED_CONFIG_PATH):
+        try:
+            with open(SPEED_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                speed_mult = float(json.load(f).get("speed_mult", 2.0))
+        except Exception:
+            pass
+    cmd.extend(["--speed", str(speed_mult)])
 
     import subprocess
     try:
