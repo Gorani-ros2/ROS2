@@ -22,7 +22,20 @@ import numpy as np
 sys.path.insert(0, "/home/knu/workspaces/duco_ros2_control_ws")
 from duco_controller import DucoController, CONFIG_PATH
 
+SPEED_CONFIG_PATH = "/home/knu/workspaces/duco_ros2_control_ws/config/duco_speed.json"
 VISION_API_STATUS = "http://localhost:5000/api/status"
+
+def get_speed_multiplier(cli_speed=None):
+    if cli_speed is not None and cli_speed > 0:
+        return max(0.5, min(float(cli_speed), 3.5))
+    if os.path.exists(SPEED_CONFIG_PATH):
+        try:
+            with open(SPEED_CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return max(0.5, min(float(data.get("speed_mult", 2.0)), 3.5))
+        except Exception:
+            pass
+    return 2.0
 
 def query_vision_screws():
     """Query live detected M4 screws from local vision API."""
@@ -59,9 +72,12 @@ def cmd_status(controller):
     print("=======================================================\n")
     return st
 
-def cmd_step1_level_zero(controller, execute=True):
+def cmd_step1_level_zero(controller, execute=True, speed_mult=2.0):
     """Step 1: Level robot TCP orientation to exact perpendicular (0.0° tilt)."""
-    print("\n[STEP 1] Leveling Robot TCP Orientation to 0° Perpendicular...")
+    scale = speed_mult / 2.0
+    vel_deg = min(15.0 * scale, 45.0)
+    acc_deg = min(25.0 * scale, 60.0)
+    print(f"\n[STEP 1] Leveling Robot TCP Orientation to 0° Perpendicular (speed: {vel_deg:.1f} deg/s)...")
     tcp = controller.get_tcp_pose()
     if not tcp:
         print("[ERROR] Could not read robot TCP pose!")
@@ -85,8 +101,8 @@ def cmd_step1_level_zero(controller, execute=True):
         print("[DRY RUN] Motion planned successfully. Run with --execute to move robot.")
         return True
 
-    print("  🚀 Executing leveling motion (speed: 15.0 deg/s)...")
-    success = controller.movej(q_target, vel_deg=15.0, acc_deg=25.0, block=True)
+    print(f"  🚀 Executing leveling motion (speed: {vel_deg:.1f} deg/s)...")
+    success = controller.movej(q_target, vel_deg=vel_deg, acc_deg=acc_deg, block=True)
     if success:
         time.sleep(0.5)
         new_tcp = controller.get_tcp_pose()
@@ -109,9 +125,12 @@ def cmd_step2_set_m4_view(controller):
         print("  ❌ Failed to register 'm4_view' pose.")
         return False
 
-def cmd_step3_move_home(controller, execute=True):
+def cmd_step3_move_home(controller, execute=True, speed_mult=2.0):
     """Step 3: Move to safe, compact folded standby home pose."""
-    print("\n[STEP 3] Moving to Compact Folded Standby Pose ('folded_home')...")
+    scale = speed_mult / 2.0
+    vel_deg = min(20.0 * scale, 60.0)
+    acc_deg = min(30.0 * scale, 90.0)
+    print(f"\n[STEP 3] Moving to Compact Folded Standby Pose ('folded_home', speed: {vel_deg:.1f} deg/s)...")
     if "folded_home" not in controller.named_poses:
         print("[ERROR] 'folded_home' pose definition not found!")
         return False
@@ -127,8 +146,8 @@ def cmd_step3_move_home(controller, execute=True):
         print("[DRY RUN] Trajectory ready. Run with --execute to move robot.")
         return True
 
-    print("  🚀 Moving smoothly to folded home pose (speed: 20.0 deg/s)...")
-    success = controller.move_to_named_pose("folded_home", vel_deg=20.0, acc_deg=30.0)
+    print(f"  🚀 Moving smoothly to folded home pose (speed: {vel_deg:.1f} deg/s)...")
+    success = controller.move_to_named_pose("folded_home", vel_deg=vel_deg, acc_deg=acc_deg)
     if success:
         time.sleep(0.5)
         new_q = controller.get_joints()
@@ -138,9 +157,14 @@ def cmd_step3_move_home(controller, execute=True):
         print("  ❌ Failed to reach folded home.")
         return False
 
-def cmd_step4_move_m4_view(controller, execute=True):
+def cmd_step4_move_m4_view(controller, execute=True, speed_mult=2.0):
     """Step 4: Return smoothly to 'm4_view' pose."""
-    print("\n[STEP 4] Returning to 'm4_view' Inspection Pose...")
+    scale = speed_mult / 2.0
+    vel_deg = min(20.0 * scale, 60.0)
+    acc_deg = min(30.0 * scale, 90.0)
+    vel_lift = min(0.06 * scale, 0.18)
+    acc_lift = min(0.10 * scale, 0.30)
+    print(f"\n[STEP 4] Returning to 'm4_view' Inspection Pose (speed: {vel_deg:.1f} deg/s)...")
     if "m4_view" not in controller.named_poses:
         print("[ERROR] 'm4_view' pose not registered yet! Run step 2 first.")
         return False
@@ -154,14 +178,14 @@ def cmd_step4_move_m4_view(controller, execute=True):
 
     cur_tcp = controller.get_tcp_pose()
     if cur_tcp and cur_tcp[2] < 150.0:
-        print(f"  ⚠️ Low altitude detected (Z={cur_tcp[2]:.1f}mm < 150mm). Executing vertical linear liftoff first...")
+        print(f"  ⚠️ Low altitude detected (Z={cur_tcp[2]:.1f}mm < 150mm). Executing vertical linear liftoff first (speed: {vel_lift*1000:.0f} mm/s)...")
         target_lift = [cur_tcp[0], cur_tcp[1], 150.0, 180.0, 0.0, cur_tcp[5]]
         if execute:
-            controller.movel(target_lift, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+            controller.movel(target_lift, vel_m_s=vel_lift, acc_m_s2=acc_lift, block=True)
             time.sleep(0.3)
 
-    print("  🚀 Moving to 'm4_view' pose (speed: 20.0 deg/s)...")
-    success = controller.move_to_named_pose("m4_view", vel_deg=20.0, acc_deg=30.0)
+    print(f"  🚀 Moving to 'm4_view' pose (speed: {vel_deg:.1f} deg/s)...")
+    success = controller.move_to_named_pose("m4_view", vel_deg=vel_deg, acc_deg=acc_deg)
     if success:
         time.sleep(0.5)
         new_tcp = controller.get_tcp_pose()
@@ -171,12 +195,22 @@ def cmd_step4_move_m4_view(controller, execute=True):
         print("  ❌ Failed to reach 'm4_view'.")
         return False
 
-def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True):
+def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True, speed_mult=2.0):
     """
     Step 5: Visual Servoing Approach to 10mm height.
     Aligns camera over detected screw and descends to 10mm clearance.
     """
-    print("\n[STEP 5] Visual Servoing 10mm Approach Pipeline...")
+    scale = speed_mult / 2.0
+    vel_travel_m_s = min(0.06 * scale, 0.18)
+    acc_travel_m_s2 = min(0.10 * scale, 0.30)
+    vel_mid_m_s = min(0.04 * scale, 0.12)
+    acc_mid_m_s2 = min(0.08 * scale, 0.24)
+    vel_desc_m_s = min(0.03 * scale, 0.09)
+    acc_desc_m_s2 = min(0.06 * scale, 0.18)
+    vel_joint_deg = min(20.0 * scale, 60.0)
+    acc_joint_deg = min(30.0 * scale, 90.0)
+
+    print(f"\n[STEP 5] Visual Servoing 10mm Approach Pipeline (Speed: {speed_mult:.1f}x)...")
     screws, v_meta = query_vision_screws()
     if not screws:
         print("[ERROR] No M4 screws detected by vision API! Ensure screw_detector_d405.py is running.")
@@ -212,10 +246,11 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True):
             print("[ERROR] Cannot read TCP pose before descent!")
             continue
 
-        # Transform camera optical offset to robot base frame using Rz = 97.35°
-        # R = [[-0.128, 0.992], [0.992, 0.128]]
-        dx_base = -0.128 * dx_cam + 0.992 * dy_cam
-        dy_base =  0.992 * dx_cam + 0.128 * dy_cam
+        # Transform camera optical offset to robot base frame dynamically using current Rz
+        th_rad = math.radians(cur_tcp[5])
+        c_th, s_th = math.cos(th_rad), math.sin(th_rad)
+        dx_base = c_th * dx_cam + s_th * dy_cam
+        dy_base = s_th * dx_cam - c_th * dy_cam
 
         MID_Z = 130.0       # mm (Closest reliable recognition height: ~8.5cm above table, >7cm D405 blind limit)
         SAFE_FLOOR_Z = 65.0  # mm (Flange height ensuring ~11-13mm air gap above screw head, zero physical contact)
@@ -242,13 +277,13 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True):
             continue
 
         # Execute Waypoint 1: High XY Align in Cartesian space
-        print(f"     🚀 [1/5] Aligning XY above screw at high altitude (speed: 60 mm/s)...")
-        controller.movel(target_xy_high, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        print(f"     🚀 [1/5] Aligning XY above screw at high altitude (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.3)
 
         # Execute Waypoint 2: Descend to closest recognition height (Z = 130.0mm)
-        print(f"     🚀 [2/5] Descending to closest recognition height (Z={MID_Z}mm, speed: 60 mm/s)...")
-        controller.movel(target_mid, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        print(f"     🚀 [2/5] Descending to closest recognition height (Z={MID_Z}mm, speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(target_mid, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.4)
 
         # Execute Waypoint 3: Mid-altitude visual re-measurement & zeroing
@@ -260,20 +295,20 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True):
             d_err = math.hypot(nearest_s['x_3d'], nearest_s['y_3d'])
             print(f"       🎯 Detected screw right below camera: Cam=[{nearest_s['x_3d']:+.2f}, {nearest_s['y_3d']:+.2f}]mm (Residual Error={d_err:.2f}mm)")
             if d_err < 35.0:
-                dx_corr = -0.128 * nearest_s['x_3d'] + 0.992 * nearest_s['y_3d']
-                dy_corr =  0.992 * nearest_s['x_3d'] + 0.128 * nearest_s['y_3d']
+                dx_corr = c_th * nearest_s['x_3d'] + s_th * nearest_s['y_3d']
+                dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
                 final_xy = [target_mid[0] + dx_corr, target_mid[1] + dy_corr]
                 print(f"       ✨ Zeroing residual offset: [ΔX_base={dx_corr:+.2f}, ΔY_base={dy_corr:+.2f}] mm")
                 target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, 180.0, 0.0, cur_tcp[5]]
-                controller.movel(target_mid_corrected, vel_m_s=0.04, acc_m_s2=0.08, block=True)
+                controller.movel(target_mid_corrected, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
                 time.sleep(0.3)
         else:
             print(f"       ⚠️ No screw detected at mid-altitude, continuing with high-altitude trajectory...")
 
         # Execute Waypoint 4: Cartesian Linear Descent to 10mm clearance (Z=65.0mm)
-        print(f"     🚀 [4/5] Cartesian linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: 30 mm/s)...")
+        print(f"     🚀 [4/5] Cartesian linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: {vel_desc_m_s*1000:.0f} mm/s)...")
         target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
-        controller.movel(target_final_low, vel_m_s=0.03, acc_m_s2=0.06, block=True)
+        controller.movel(target_final_low, vel_m_s=vel_desc_m_s, acc_m_s2=acc_desc_m_s2, block=True)
         
         # Execute Waypoint 5: Hover 1.5s and capture snapshot
         print(f"     📸 [5/5] Hovering at 10mm clearance for 1.5s inspection...")
@@ -287,21 +322,21 @@ def cmd_step5_visual_servoing(controller, target_screw_idx=None, execute=True):
             pass
 
         # Execute Waypoint 6: Retract vertically back up to safety height
-        print(f"     🚀 Retracting vertically back up to safety height (speed: 60 mm/s)...")
+        print(f"     🚀 Retracting vertically back up to safety height (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
         target_retract = [final_xy[0], final_xy[1], cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
-        controller.movel(target_retract, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        controller.movel(target_retract, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.3)
 
         # Reset cleanly to standard m4_view pose to prevent cumulative drift
-        print(f"     🔄 Returning to 'm4_view' standby pose (speed: 20.0 deg/s)...")
-        controller.move_to_named_pose("m4_view", vel_deg=20.0, acc_deg=30.0)
+        print(f"     🔄 Returning to 'm4_view' standby pose (speed: {vel_joint_deg:.1f} deg/s)...")
+        controller.move_to_named_pose("m4_view", vel_deg=vel_joint_deg, acc_deg=acc_joint_deg)
         time.sleep(0.5)
         print(f"     ✅ Completed inspection of Target #{i+1} with 2-stage zeroing!")
 
     print("\n  🎉 All selected targets completed!")
     return True
 
-def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
+def cmd_step5_clock_outer(controller, target_clock=None, execute=True, speed_mult=2.0):
     """
     Executes Cartesian linear interpolated descent on the 4 outermost screws in clockwise order:
       12 o'clock (Top / 상) -> m4_view
@@ -309,7 +344,17 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
       6 o'clock (Bottom / 하) -> m4_view
       9 o'clock (Left / 좌) -> m4_view
     """
-    print("\n[STEP 5 - CLOCK] Starting 4 Outermost Screws Clockwise Interpolation Pipeline...")
+    scale = speed_mult / 2.0
+    vel_travel_m_s = min(0.06 * scale, 0.18)
+    acc_travel_m_s2 = min(0.10 * scale, 0.30)
+    vel_mid_m_s = min(0.04 * scale, 0.12)
+    acc_mid_m_s2 = min(0.08 * scale, 0.24)
+    vel_desc_m_s = min(0.03 * scale, 0.09)
+    acc_desc_m_s2 = min(0.06 * scale, 0.18)
+    vel_joint_deg = min(20.0 * scale, 60.0)
+    acc_joint_deg = min(30.0 * scale, 90.0)
+
+    print(f"\n[STEP 5 - CLOCK] Starting 4 Outermost Screws Clockwise Interpolation Pipeline (Speed: {speed_mult:.1f}x)...")
     print("  Sequence: m4_view -> 12시 10mm -> m4_view -> 3시 10mm -> m4_view -> 6시 10mm -> m4_view -> 9시 10mm -> m4_view")
 
     if "m4_view" not in controller.named_poses:
@@ -372,10 +417,11 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
             print("[ERROR] Cannot read TCP pose!")
             return False
 
-        # Transform camera optical offset to robot base frame using Rz = 97.35°
-        # R = [[-0.128, 0.992], [0.992, 0.128]]
-        dx_base = -0.128 * dx_cam + 0.992 * dy_cam
-        dy_base =  0.992 * dx_cam + 0.128 * dy_cam
+        # Transform camera optical offset to robot base frame dynamically using current Rz
+        th_rad = math.radians(cur_tcp[5])
+        c_th, s_th = math.cos(th_rad), math.sin(th_rad)
+        dx_base = c_th * dx_cam + s_th * dy_cam
+        dy_base = s_th * dx_cam - c_th * dy_cam
 
         MID_Z = 130.0       # mm (Closest reliable recognition height: ~8.5cm above table, >7cm D405 blind limit)
         SAFE_FLOOR_Z = 65.0  # mm (Flange height ensuring ~11-13mm air gap above screw head, zero physical contact)
@@ -406,13 +452,13 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
             continue
 
         # 1. Align XY above target at high altitude (Z = 333.9mm) using Cartesian movel
-        print(f"  🚀 [1/5] Aligning camera above {label} at high altitude (speed: 60 mm/s)...")
-        controller.movel(target_xy_high, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        print(f"  🚀 [1/5] Aligning camera above {label} at high altitude (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(target_xy_high, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.3)
 
         # 2. Descend to closest recognition height (Z = 130.0mm) using Cartesian movel
-        print(f"  🚀 [2/5] Descending to closest recognition height (Z={MID_Z}mm, speed: 60 mm/s)...")
-        controller.movel(target_mid, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        print(f"  🚀 [2/5] Descending to closest recognition height (Z={MID_Z}mm, speed: {vel_travel_m_s*1000:.0f} mm/s)...")
+        controller.movel(target_mid, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.4)
 
         # 3. Mid-altitude visual re-measurement & zeroing
@@ -424,20 +470,20 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
             d_err = math.hypot(nearest_s['x_3d'], nearest_s['y_3d'])
             print(f"    🎯 Detected screw right below camera: Cam=[{nearest_s['x_3d']:+.2f}, {nearest_s['y_3d']:+.2f}]mm (Residual Error={d_err:.2f}mm)")
             if d_err < 35.0:
-                dx_corr = -0.128 * nearest_s['x_3d'] + 0.992 * nearest_s['y_3d']
-                dy_corr =  0.992 * nearest_s['x_3d'] + 0.128 * nearest_s['y_3d']
+                dx_corr = c_th * nearest_s['x_3d'] + s_th * nearest_s['y_3d']
+                dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
                 final_xy = [target_mid[0] + dx_corr, target_mid[1] + dy_corr]
                 print(f"    ✨ Zeroing residual offset: [ΔX_base={dx_corr:+.2f}, ΔY_base={dy_corr:+.2f}] mm")
                 target_mid_corrected = [final_xy[0], final_xy[1], MID_Z, 180.0, 0.0, cur_tcp[5]]
-                controller.movel(target_mid_corrected, vel_m_s=0.04, acc_m_s2=0.08, block=True)
+                controller.movel(target_mid_corrected, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
                 time.sleep(0.3)
         else:
             print(f"    ⚠️ No screw detected at mid-altitude, continuing with high-altitude trajectory...")
 
         # 4. Final Linear Descent to 10mm Clearance (Z = 65.0mm)
-        print(f"  🚀 [4/5] Final linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: 30 mm/s)...")
+        print(f"  🚀 [4/5] Final linear descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm, speed: {vel_desc_m_s*1000:.0f} mm/s)...")
         target_final_low = [final_xy[0], final_xy[1], SAFE_FLOOR_Z, 180.0, 0.0, cur_tcp[5]]
-        controller.movel(target_final_low, vel_m_s=0.03, acc_m_s2=0.06, block=True)
+        controller.movel(target_final_low, vel_m_s=vel_desc_m_s, acc_m_s2=acc_desc_m_s2, block=True)
         
         # 5. Hover 1.5 seconds and capture inspection snapshot
         print(f"  📸 [5/5] Hovering at 10mm clearance for 1.5s inspection...")
@@ -451,14 +497,14 @@ def cmd_step5_clock_outer(controller, target_clock=None, execute=True):
             print(f"    [WARN] Snapshot request failed: {e}")
 
         # 6. Retract vertically back up to high altitude (Z = 333.9mm) using Cartesian movel
-        print(f"  🚀 Retracting vertically back to safety height (speed: 60 mm/s)...")
+        print(f"  🚀 Retracting vertically back to safety height (speed: {vel_travel_m_s*1000:.0f} mm/s)...")
         target_retract = [final_xy[0], final_xy[1], cur_tcp[2], 180.0, 0.0, cur_tcp[5]]
-        controller.movel(target_retract, vel_m_s=0.06, acc_m_s2=0.10, block=True)
+        controller.movel(target_retract, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.3)
 
         # 7. Return cleanly to standard m4_view pose
-        print(f"  🔄 Returning to 'm4_view' standby pose (speed: 20.0 deg/s)...")
-        controller.move_to_named_pose("m4_view", vel_deg=20.0, acc_deg=30.0)
+        print(f"  🔄 Returning to 'm4_view' standby pose (speed: {vel_joint_deg:.1f} deg/s)...")
+        controller.move_to_named_pose("m4_view", vel_deg=vel_joint_deg, acc_deg=acc_joint_deg)
         time.sleep(0.5)
         print(f"  ✅ Completed {label} inspection cycle with 2-stage zeroing!")
 
@@ -471,7 +517,11 @@ def main():
                         help="Action to execute")
     parser.add_argument("--execute", action="store_true", help="Execute actual robot motion (default is dry-run for safety)")
     parser.add_argument("--target", type=int, default=None, help="Target screw index for visual servoing (0~6)")
+    parser.add_argument("--speed", type=float, default=None, help="Speed multiplier (0.5 to 3.5, default reads from config or 2.0)")
     args = parser.parse_args()
+
+    speed_mult = get_speed_multiplier(args.speed)
+    print(f"⚙️ Active Pipeline Speed Multiplier: {speed_mult:.1f}x")
 
     controller = DucoController()
     if not controller.connect():
@@ -482,24 +532,24 @@ def main():
         if args.action == "status":
             cmd_status(controller)
         elif args.action == "step1_level":
-            cmd_step1_level_zero(controller, execute=args.execute)
+            cmd_step1_level_zero(controller, execute=args.execute, speed_mult=speed_mult)
         elif args.action == "step2_set_view":
             cmd_step2_set_m4_view(controller)
         elif args.action == "step3_home":
-            cmd_step3_move_home(controller, execute=args.execute)
+            cmd_step3_move_home(controller, execute=args.execute, speed_mult=speed_mult)
         elif args.action == "step4_view":
-            cmd_step4_move_m4_view(controller, execute=args.execute)
+            cmd_step4_move_m4_view(controller, execute=args.execute, speed_mult=speed_mult)
         elif args.action == "step5_servo":
-            cmd_step5_visual_servoing(controller, target_screw_idx=args.target, execute=args.execute)
+            cmd_step5_visual_servoing(controller, target_screw_idx=args.target, execute=args.execute, speed_mult=speed_mult)
         elif args.action == "clock_outer":
-            cmd_step5_clock_outer(controller, target_clock=args.target, execute=args.execute)
+            cmd_step5_clock_outer(controller, target_clock=args.target, execute=args.execute, speed_mult=speed_mult)
         elif args.action == "run_all":
             print("\n🌟 Executing Complete 5-Step Pipeline Sequence:")
-            if not cmd_step1_level_zero(controller, execute=args.execute): return
+            if not cmd_step1_level_zero(controller, execute=args.execute, speed_mult=speed_mult): return
             if not cmd_step2_set_m4_view(controller): return
-            if not cmd_step3_move_home(controller, execute=args.execute): return
-            if not cmd_step4_move_m4_view(controller, execute=args.execute): return
-            if not cmd_step5_visual_servoing(controller, target_screw_idx=0, execute=args.execute): return
+            if not cmd_step3_move_home(controller, execute=args.execute, speed_mult=speed_mult): return
+            if not cmd_step4_move_m4_view(controller, execute=args.execute, speed_mult=speed_mult): return
+            if not cmd_step5_visual_servoing(controller, target_screw_idx=0, execute=args.execute, speed_mult=speed_mult): return
     finally:
         controller.disconnect()
 
