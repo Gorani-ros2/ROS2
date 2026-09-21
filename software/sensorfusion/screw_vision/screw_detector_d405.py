@@ -361,7 +361,7 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-                    <label style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: block;">5️⃣ 외곽 M4 나사 10mm 안전 접근 (직교 선형 보간)</label>
+                    <label style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px; display: block;">5️⃣ 외곽 M4 나사 10mm 초정밀 2단계 접근 (30cm 상공 → 8.5cm 근접재보정 → 10mm)</label>
                     <div class="btn-group" style="grid-template-columns: 1fr 1fr; margin-bottom: 6px;">
                         <button class="btn btn-primary" onclick="runClockServo(12)">🕛 12시 (상) 10mm</button>
                         <button class="btn btn-primary" onclick="runClockServo(3)">🕒 3시 (우) 10mm</button>
