@@ -51,7 +51,7 @@ class VisionState:
         self.avg_depth_mm = 0.0
         self.detections = []
         self.black_screw_mode = True
-        self.thresh_val = 95
+        self.thresh_val = 85
         self.auto_foam_roi = True
         self.snapshot_saved = None
         
@@ -1281,12 +1281,96 @@ def run_vision_loop(headless=False):
             all_z = []
             rejected_items = []
 
+            # Touching Screw Cluster Decomposition & Candidate Extraction
+            candidate_contours = []
             for cnt in contours:
                 area = cv2.contourArea(cnt)
-                # Filter noise (<150px) and table background (>10000px)
-                if area < 150 or area > 10000:
+                if area < 80 or area > 10000:
+                    continue
+                (cx, cy), radius = cv2.minEnclosingCircle(cnt)
+                cx_i, cy_i = int(cx), int(cy)
+                if cx_i < 50 or cx_i >= w - 50 or cy_i < 15 or cy_i >= h - 15:
+                    continue
+                if cy_i < 110: # Reject upper table sticker text
                     continue
 
+                rect = cv2.minAreaRect(cnt)
+                (rcx, rcy), (rw, rh), angle = rect
+                ar = max(rw, rh) / (min(rw, rh) + 1e-5)
+                hull = cv2.convexHull(cnt)
+                solidity = float(area) / (cv2.contourArea(hull) + 1e-5)
+
+                z_raw = d_raw[min(h-1, max(0, cy_i)), min(w-1, max(0, cx_i))]
+                z_est = (z_raw * depth_scale * 1000.0) if (0.05 < z_raw * depth_scale < 0.50) else 295.0
+                area_mm2 = area * ((z_est / fx) ** 2)
+                tot_l_mm = (max(rw, rh) * z_est) / fx
+                tot_w_mm = (min(rw, rh) * z_est) / fx
+
+                # A. Clean isolated single screw
+                if ar >= 1.7 and solidity >= 0.60 and area_mm2 <= 115.0 and tot_w_mm <= 8.5:
+                    candidate_contours.append(cnt)
+                # B. Touching cluster containing multiple screws
+                elif area_mm2 > 115.0 or tot_w_mm > 8.5 or tot_l_mm > 26.0 or (area >= 300 and (ar < 1.7 or solidity < 0.60)):
+                    K = max(2, min(5, int(round(area_mm2 / 70.0))))
+                    x, y, bw, bh = cv2.boundingRect(cnt)
+                    pad = 8
+                    x1, y1 = max(0, x - pad), max(0, y - pad)
+                    x2, y2 = min(w, x + bw + pad), min(h, y + bh + pad)
+                    local_mask = np.zeros((y2 - y1, x2 - x1), dtype=np.uint8)
+                    shifted_cnt = cnt - np.array([x1, y1])
+                    cv2.drawContours(local_mask, [shifted_cnt], -1, 255, -1)
+
+                    local_raw = color_image[y1:y2, x1:x2]
+                    local_gray = cv2.cvtColor(local_raw, cv2.COLOR_BGR2GRAY)
+
+                    skel = cv2.ximgproc.thinning(local_mask, thinningType=cv2.ximgproc.THINNING_ZHANGSUEN)
+                    k_neigh = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.uint8)
+                    neigh_count = cv2.filter2D((skel > 0).astype(np.uint8), -1, k_neigh)
+                    junctions = (skel > 0) & (neigh_count >= 3)
+                    junc_dil = cv2.dilate(junctions.astype(np.uint8)*255, np.ones((5,5), np.uint8))
+                    branches = (skel > 0) & (junc_dil == 0)
+
+                    num_b, b_labels = cv2.connectedComponents(branches.astype(np.uint8))
+                    branch_info = []
+                    for b in range(1, num_b):
+                        pts = np.argwhere(b_labels == b)
+                        if len(pts) >= 4:
+                            branch_info.append((len(pts), b))
+                    branch_info.sort(reverse=True)
+                    top_branches = branch_info[:K]
+
+                    markers = np.zeros_like(local_mask, dtype=np.int32)
+                    markers[local_mask == 0] = 1 # background
+                    m_id = 2
+                    for _, b in top_branches:
+                        b_mask = (b_labels == b).astype(np.uint8) * 255
+                        markers[b_mask > 0] = m_id
+                        m_id += 1
+
+                    if m_id > 2:
+                        gradx = cv2.Sobel(local_gray, cv2.CV_32F, 1, 0, ksize=3)
+                        grady = cv2.Sobel(local_gray, cv2.CV_32F, 0, 1, ksize=3)
+                        grad = np.uint8(np.clip(np.sqrt(gradx**2 + grady**2), 0, 255))
+                        grad_bgr = cv2.cvtColor(grad, cv2.COLOR_GRAY2BGR)
+
+                        cv2.watershed(grad_bgr, markers)
+                        for m in range(2, m_id):
+                            piece = (markers == m).astype(np.uint8) * 255
+                            sub_cnts, _ = cv2.findContours(piece, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                            if sub_cnts:
+                                sc = max(sub_cnts, key=cv2.contourArea)
+                                sc_rect = cv2.minAreaRect(sc)
+                                (s_rcx, s_rcy), (s_rw, s_rh), s_ang = sc_rect
+                                s_l = (max(s_rw, s_rh) * z_est) / fx
+                                s_w = (min(s_rw, s_rh) * z_est) / fx
+                                s_a = cv2.contourArea(sc) * ((z_est / fx) ** 2)
+                                s_rat = max(s_rw, s_rh) / (min(s_rw, s_rh) + 1e-5)
+                                orig_sc = sc + np.array([x1, y1])
+                                if (11.0 <= s_l <= 28.0 and 2.5 <= s_w <= 11.0 and 15.0 <= s_a <= 125.0 and s_rat >= 1.7):
+                                    candidate_contours.append(orig_sc)
+
+            for cnt in candidate_contours:
+                area = cv2.contourArea(cnt)
                 (cx, cy), radius = cv2.minEnclosingCircle(cnt)
                 cx_i, cy_i = int(cx), int(cy)
                 if cx_i < 50 or cx_i >= w - 50 or cy_i < 15 or cy_i >= h - 15:
@@ -1294,19 +1378,9 @@ def run_vision_loop(headless=False):
 
                 rect = cv2.minAreaRect(cnt)
                 (rcx, rcy), (rw, rh), angle = rect
-                ar = max(rw, rh) / (min(rw, rh) + 1e-5)
-                if ar < 1.6:
-                    rejected_items.append({"pos": [cx_i, cy_i], "reason": f"AR ({ar:.2f}) < 1.6", "area": area})
-                    continue
-
-                hull = cv2.convexHull(cnt)
-                solidity = float(area) / (cv2.contourArea(hull) + 1e-5)
-                if solidity < 0.65:
-                    rejected_items.append({"pos": [cx_i, cy_i], "reason": f"Solidity ({solidity:.2f}) < 0.65", "area": area, "ar": ar})
-                    continue
 
                 # Query Real Sub-millimeter Depth with Perimeter Fallback
-                raw_val = d_raw[cy_i, cx_i]
+                raw_val = d_raw[min(h-1, max(0, cy_i)), min(w-1, max(0, cx_i))]
                 z_m = raw_val * depth_scale
                 if z_m < 0.05 or z_m > 0.50:
                     roi_vals = []
@@ -1351,8 +1425,8 @@ def run_vision_loop(headless=False):
                 tot_w_mm = (min(rw, rh) * z_mm) / fx
                 area_mm2 = area * ((z_mm / fx) ** 2)
 
-                # Strict M4 screw physical dimensions: Length 14~28mm, Width 4.0~9.5mm, Area 50~125mm^2
-                if not (14.0 <= tot_l_mm <= 28.0 and 4.0 <= tot_w_mm <= 9.5 and 50.0 <= area_mm2 <= 125.0):
+                # Strict M4 screw physical dimensions: Length 11~28mm, Width 2.5~11.0mm, Area 15~125mm^2
+                if not (11.0 <= tot_l_mm <= 28.0 and 2.5 <= tot_w_mm <= 11.0 and 15.0 <= area_mm2 <= 125.0):
                     rejected_items.append({"pos": [cx_i, cy_i], "reason": f"dims L={tot_l_mm:.1f}, W={tot_w_mm:.1f}, A={area_mm2:.1f}", "area": area})
                     continue
 
