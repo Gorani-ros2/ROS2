@@ -1168,8 +1168,8 @@ def run_vision_loop(headless=False):
                     if foam_area > 0.08 * h * w:
                         pad_canvas = np.zeros_like(gray)
                         cv2.drawContours(pad_canvas, [c_foam], -1, 255, -1)
-                        # Erode 10px to eliminate table boundary bleed while preserving outer screws
-                        pad_eroded = cv2.erode(pad_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10)))
+                        # Erode 16px to eliminate table boundary bleed while preserving outer screws
+                        pad_eroded = cv2.erode(pad_canvas, cv2.getStructuringElement(cv2.MORPH_RECT, (16, 16)))
                         screw_mask = np.zeros_like(gray)
                         screw_mask[(blurred < thresh_val) & (pad_eroded > 0)] = 255
                     else:
@@ -1289,9 +1289,8 @@ def run_vision_loop(headless=False):
                     continue
                 (cx, cy), radius = cv2.minEnclosingCircle(cnt)
                 cx_i, cy_i = int(cx), int(cy)
-                if cx_i < 50 or cx_i >= w - 50 or cy_i < 15 or cy_i >= h - 15:
-                    continue
-                if cy_i < 110: # Reject upper table sticker text
+                # Spatial ROI: exclude table borders and upper sticker (Foam pad is Y: 110~550, X: 80~w-80)
+                if cy_i < 110 or cy_i > 550 or cx_i < 80 or cx_i >= w - 80:
                     continue
 
                 rect = cv2.minAreaRect(cnt)
@@ -1311,7 +1310,7 @@ def run_vision_loop(headless=False):
                     candidate_contours.append(cnt)
                 # B. Touching cluster containing multiple screws
                 elif area_mm2 > 115.0 or tot_w_mm > 8.5 or tot_l_mm > 26.0 or (area >= 300 and (ar < 1.7 or solidity < 0.60)):
-                    K = max(2, min(5, int(round(area_mm2 / 70.0))))
+                    K = max(2, min(5, int(round(area_mm2 / 80.0))))
                     x, y, bw, bh = cv2.boundingRect(cnt)
                     pad = 8
                     x1, y1 = max(0, x - pad), max(0, y - pad)
@@ -1324,17 +1323,26 @@ def run_vision_loop(headless=False):
                     local_gray = cv2.cvtColor(local_raw, cv2.COLOR_BGR2GRAY)
 
                     skel = cv2.ximgproc.thinning(local_mask, thinningType=cv2.ximgproc.THINNING_ZHANGSUEN)
-                    k_neigh = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.uint8)
-                    neigh_count = cv2.filter2D((skel > 0).astype(np.uint8), -1, k_neigh)
-                    junctions = (skel > 0) & (neigh_count >= 3)
-                    junc_dil = cv2.dilate(junctions.astype(np.uint8)*255, np.ones((5,5), np.uint8))
-                    branches = (skel > 0) & (junc_dil == 0)
+                    skel_bin = (skel > 0).astype(np.uint8)
+                    p_skel = np.pad(skel_bin, 1)
+                    neighbors = [
+                        p_skel[:-2, 1:-1], p_skel[:-2, 2:], p_skel[1:-1, 2:], p_skel[2:, 2:],
+                        p_skel[2:, 1:-1], p_skel[2:, :-2], p_skel[1:-1, :-2], p_skel[:-2, :-2]
+                    ]
+                    crossing_num = np.zeros_like(skel_bin, dtype=np.uint8)
+                    for i in range(8):
+                        crossing_num += ((neighbors[i] == 0) & (neighbors[(i + 1) % 8] == 1)).astype(np.uint8)
+                    crossing_num *= skel_bin
+
+                    junc = crossing_num >= 3
+                    junc_dil = cv2.dilate(junc.astype(np.uint8), np.ones((3, 3), np.uint8))
+                    branches = (skel_bin > 0) & (junc_dil == 0)
 
                     num_b, b_labels = cv2.connectedComponents(branches.astype(np.uint8))
                     branch_info = []
                     for b in range(1, num_b):
                         pts = np.argwhere(b_labels == b)
-                        if len(pts) >= 4:
+                        if len(pts) >= 3:
                             branch_info.append((len(pts), b))
                     branch_info.sort(reverse=True)
                     top_branches = branch_info[:K]
@@ -1366,14 +1374,14 @@ def run_vision_loop(headless=False):
                                 s_a = cv2.contourArea(sc) * ((z_est / fx) ** 2)
                                 s_rat = max(s_rw, s_rh) / (min(s_rw, s_rh) + 1e-5)
                                 orig_sc = sc + np.array([x1, y1])
-                                if (11.0 <= s_l <= 28.0 and 2.5 <= s_w <= 11.0 and 15.0 <= s_a <= 125.0 and s_rat >= 1.7):
+                                if (9.5 <= s_l <= 28.0 and 2.0 <= s_w <= 11.0 and 15.0 <= s_a <= 125.0 and s_rat >= 1.6):
                                     candidate_contours.append(orig_sc)
 
             for cnt in candidate_contours:
                 area = cv2.contourArea(cnt)
                 (cx, cy), radius = cv2.minEnclosingCircle(cnt)
                 cx_i, cy_i = int(cx), int(cy)
-                if cx_i < 50 or cx_i >= w - 50 or cy_i < 15 or cy_i >= h - 15:
+                if cy_i < 110 or cy_i > 550 or cx_i < 80 or cx_i >= w - 80:
                     continue
 
                 rect = cv2.minAreaRect(cnt)
@@ -1425,8 +1433,8 @@ def run_vision_loop(headless=False):
                 tot_w_mm = (min(rw, rh) * z_mm) / fx
                 area_mm2 = area * ((z_mm / fx) ** 2)
 
-                # Strict M4 screw physical dimensions: Length 11~28mm, Width 2.5~11.0mm, Area 15~125mm^2
-                if not (11.0 <= tot_l_mm <= 28.0 and 2.5 <= tot_w_mm <= 11.0 and 15.0 <= area_mm2 <= 125.0):
+                # Strict M4 screw physical dimensions: Length 9.5~28mm, Width 2.0~11.0mm, Area 15~125mm^2
+                if not (9.5 <= tot_l_mm <= 28.0 and 2.0 <= tot_w_mm <= 11.0 and 15.0 <= area_mm2 <= 125.0):
                     rejected_items.append({"pos": [cx_i, cy_i], "reason": f"dims L={tot_l_mm:.1f}, W={tot_w_mm:.1f}, A={area_mm2:.1f}", "area": area})
                     continue
 
