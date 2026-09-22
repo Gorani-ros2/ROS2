@@ -1455,15 +1455,12 @@ def run_vision_loop(headless=False):
                     # 2. Center cross marker
                     cv2.drawMarker(vis, (cx_i, cy_i), (255, 255, 255), cv2.MARKER_CROSS, 6, 1)
 
-                    # 5. Text Overlay with Calibrated Table 2D Coordinates (Clean Orange & Sky Blue, No Green Text)
-                    info_line1 = f"{cls_name} [d={shank_dia_mm:.1f}mm]"
-                    info_line2 = f"Tbl: [{x_tbl_mm:+.1f}, {y_tbl_mm:+.1f}]mm | r={dist_center_mm:.1f}"
-                    off_x = -45
-                    off_y = -18
-                    if cx_i > w - 140: off_x = -130
-                    if cy_i < 50: off_y = 35
-                    cv2.putText(vis, info_line1, (cx_i + off_x, cy_i + off_y), cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
-                    cv2.putText(vis, info_line2, (cx_i + off_x, cy_i + off_y + 13), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (56, 189, 248), 1, cv2.LINE_AA)
+                    # 3. Minimal Identifier Label (#1, #2, ...)
+                    badge_text = f"#{m4_count}"
+                    bx = cx_i - 10
+                    by = cy_i - 10 if cy_i >= 30 else cy_i + 20
+                    cv2.putText(vis, badge_text, (bx, by), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 0, 0), 3, cv2.LINE_AA)
+                    cv2.putText(vis, badge_text, (bx, by), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (0, 215, 255), 1, cv2.LINE_AA)
 
                     detected_items.append({
                         "class": cls_name,
@@ -1486,19 +1483,16 @@ def run_vision_loop(headless=False):
                         "length": float(tot_l_mm)
                     })
 
-            # HUD Display on main frame (placed at bottom to never obscure 12 o'clock screw)
-            hud = vis[h-75:h, :].copy()
-            cv2.rectangle(vis, (0, h-75), (w, h), (20, 20, 20), -1)
-            cv2.addWeighted(hud, 0.25, vis[h-75:h, :], 0.75, 0, vis[h-75:h, :])
+            # HUD Display on main frame (clean minimal status bar)
+            hud = vis[h-55:h, :].copy()
+            cv2.rectangle(vis, (0, h-55), (w, h), (20, 20, 20), -1)
+            cv2.addWeighted(hud, 0.25, vis[h-55:h, :], 0.75, 0, vis[h-55:h, :])
 
             avg_z = float(np.mean(all_z)) if all_z else 0.0
-            mode_lbl = "BLACK SCREW (White BG)" if black_mode else "SILVER SCREW (Dark BG)"
-            cv2.putText(vis, f"D405 Calibrated Inspector | FPS: {fps:.1f} | Mode: {mode_lbl} | Tilt: P={cur_pitch:+.1f}° R={cur_roll:+.1f}°", 
-                        (15, h - 52), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-            cv2.putText(vis, f"Detected M4: {m4_count} pcs | Z_avg: {avg_z:.1f}mm | Table Leveled: {'YES' if is_calib else 'PENDING'}", 
+            cv2.putText(vis, f"M4 Screws: {m4_count} pcs | Z: {avg_z:.1f}mm | FPS: {fps:.1f}", 
                         (15, h - 28), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 255), 2)
-            cv2.putText(vis, "[Web: http://localhost:5000] | [REC: R] | [C] Calib | [B] Mode | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
-                        (15, h - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
+            cv2.putText(vis, "Web: http://localhost:5000 | [C] Calib | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
+                        (15, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
 
             # Update Global State
             writer_to_use = None
