@@ -515,7 +515,7 @@ HTML_TEMPLATE = """
                     <th>Calibrated Table 2D (X, Y mm)</th>
                     <th>Dist from Center</th>
                     <th>Raw Camera 3D (X, Y, Z mm)</th>
-                    <th>Angle</th>
+                    <th>Head Angle</th>
                     <th>Head Dia (D)</th>
                     <th>Shank Dia (d)</th>
                     <th>Length (L)</th>
@@ -765,7 +765,7 @@ HTML_TEMPLATE = """
                                 <td class="highlight-calib">[${item.x_tbl.toFixed(1)}, ${item.y_tbl.toFixed(1)}] mm</td>
                                 <td>${item.dist_center.toFixed(1)} mm</td>
                                 <td style="color: var(--text-dim);">[${item.x_3d.toFixed(1)}, ${item.y_3d.toFixed(1)}, ${item.z_3d.toFixed(1)}]</td>
-                                <td>${item.angle.toFixed(1)}°</td>
+                                <td style="color: #4ade80; font-weight: 700;">${item.head_angle_deg !== undefined ? (item.head_angle_deg >= 0 ? '+' : '') + item.head_angle_deg.toFixed(0) + '°' : item.angle.toFixed(1) + '°'}</td>
                                 <td>${item.head_dia.toFixed(2)} mm</td>
                                 <td>${item.shank_dia.toFixed(2)} mm</td>
                                 <td>${item.length.toFixed(1)} mm</td>
@@ -1000,42 +1000,92 @@ def run_vision_loop(headless=False):
     config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)
 
     profile = None
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        try:
-            profile = pipeline.start(config)
-            print(f"[INFO] D405 Pipeline started successfully (Attempt {attempt}).")
-            break
-        except Exception as e:
-            print(f"[WARN] Failed to start pipeline on attempt {attempt}: {e}")
-            if attempt < max_retries:
-                try:
-                    ctx = rs.context()
-                    for dev in ctx.query_devices():
-                        dev.hardware_reset()
-                    time.sleep(3)
-                except Exception:
-                    pass
-            else:
-                print("[ERROR] Could not start RealSense D405.")
-                state.running = False
-                return
+    offline_mode = False
+    cached_img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_view_color.png")
+    cached_depth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "current_view_depth.npy")
 
-    # Auto-query depth scale (D405 is 0.0001 = 0.1 mm per unit)
-    depth_sensor = profile.get_device().first_depth_sensor()
-    depth_scale = depth_sensor.get_depth_scale()
-    print(f"[INFO] D405 Depth Scale: {depth_scale} (0.1 mm precision)")
+    try:
+        ctx = rs.context()
+        connected_devs = ctx.query_devices()
+    except Exception:
+        connected_devs = []
 
-    # Color stream intrinsics
-    color_profile = profile.get_stream(rs.stream.color)
-    intrinsics = color_profile.as_video_stream_profile().get_intrinsics()
-    fx, fy = intrinsics.fx, intrinsics.fy
-    cx_cam, cy_cam = intrinsics.ppx, intrinsics.ppy
-    dist_coeffs = np.array(intrinsics.coeffs, dtype=np.float64)
-    print(f"[INFO] Camera Intrinsics: fx={fx:.1f}, fy={fy:.1f}, cx={cx_cam:.1f}, cy={cy_cam:.1f}")
-    print(f"[INFO] Distortion Coeffs: {dist_coeffs}")
+    if len(connected_devs) == 0:
+        if os.path.exists(cached_img_path):
+            print("[INFO] RealSense D405 not detected on USB. Starting immediately in OFFLINE SIMULATION / REPLAY MODE with cached frames...")
+            offline_mode = True
+        else:
+            print("[ERROR] RealSense D405 not detected and no cached frame found.")
+            state.running = False
+            return
+    else:
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                profile = pipeline.start(config)
+                print(f"[INFO] D405 Pipeline started successfully (Attempt {attempt}).")
+                break
+            except Exception as e:
+                print(f"[WARN] Failed to start pipeline on attempt {attempt}: {e}")
+                if attempt < max_retries:
+                    try:
+                        for dev in connected_devs:
+                            dev.hardware_reset()
+                        time.sleep(2)
+                    except Exception:
+                        pass
+                else:
+                    if os.path.exists(cached_img_path):
+                        print("[INFO] Starting in OFFLINE SIMULATION / REPLAY MODE with cached frames...")
+                        offline_mode = True
+                        break
+                    else:
+                        print("[ERROR] Could not start RealSense D405.")
+                        state.running = False
+                        return
 
-    align = rs.align(rs.stream.color)
+    class MockIntrinsics:
+        def __init__(self):
+            self.fx, self.fy = 636.5, 636.5
+            self.ppx, self.ppy = 627.4, 367.3
+            self.coeffs = [0, 0, 0, 0, 0]
+
+    def deproject_pixel_to_point(intr, pixel, z):
+        if not offline_mode and hasattr(rs, 'rs2_deproject_pixel_to_point') and not isinstance(intr, MockIntrinsics):
+            try:
+                return rs.rs2_deproject_pixel_to_point(intr, pixel, z)
+            except Exception:
+                pass
+        return [
+            (pixel[0] - intr.ppx) * z / intr.fx,
+            (pixel[1] - intr.ppy) * z / intr.fy,
+            z
+        ]
+
+    if offline_mode:
+        depth_scale = 0.0001
+        fx, fy = 636.5, 636.5
+        cx_cam, cy_cam = 627.4, 367.3
+        dist_coeffs = np.zeros(5)
+        intrinsics = MockIntrinsics()
+        cached_color = cv2.imread(cached_img_path)
+        cached_depth = np.load(cached_depth_path) if os.path.exists(cached_depth_path) else np.zeros(cached_color.shape[:2], dtype=np.uint16)
+        print(f"[INFO] Loaded offline frame: {cached_img_path} ({cached_color.shape})")
+    else:
+        # Auto-query depth scale (D405 is 0.0001 = 0.1 mm per unit)
+        depth_sensor = profile.get_device().first_depth_sensor()
+        depth_scale = depth_sensor.get_depth_scale()
+        print(f"[INFO] D405 Depth Scale: {depth_scale} (0.1 mm precision)")
+
+        # Color stream intrinsics
+        color_profile = profile.get_stream(rs.stream.color)
+        intrinsics = color_profile.as_video_stream_profile().get_intrinsics()
+        fx, fy = intrinsics.fx, intrinsics.fy
+        cx_cam, cy_cam = intrinsics.ppx, intrinsics.ppy
+        dist_coeffs = np.array(intrinsics.coeffs, dtype=np.float64)
+        print(f"[INFO] Camera Intrinsics: fx={fx:.1f}, fy={fy:.1f}, cx={cx_cam:.1f}, cy={cy_cam:.1f}")
+        print(f"[INFO] Distortion Coeffs: {dist_coeffs}")
+        align = rs.align(rs.stream.color)
 
     fps_start = time.time()
     frame_count = 0
@@ -1051,28 +1101,34 @@ def run_vision_loop(headless=False):
 
     try:
         while state.running:
-            try:
-                frames = pipeline.wait_for_frames(timeout_ms=3000)
-            except RuntimeError as e:
-                print(f"[WARN] wait_for_frames timeout: {e}")
-                time.sleep(0.05)
-                continue
+            if offline_mode:
+                time.sleep(0.033)
+                color_image = cached_color.copy()
+                d_raw = cached_depth.copy()
+                h, w = color_image.shape[:2]
+            else:
+                try:
+                    frames = pipeline.wait_for_frames(timeout_ms=3000)
+                except RuntimeError as e:
+                    print(f"[WARN] wait_for_frames timeout: {e}")
+                    time.sleep(0.05)
+                    continue
 
-            aligned_frames = align.process(frames)
-            color_frame = aligned_frames.get_color_frame()
-            depth_frame = aligned_frames.get_depth_frame()
+                aligned_frames = align.process(frames)
+                color_frame = aligned_frames.get_color_frame()
+                depth_frame = aligned_frames.get_depth_frame()
 
-            if not color_frame or not depth_frame:
-                continue
+                if not color_frame or not depth_frame:
+                    continue
+
+                color_image = np.asanyarray(color_frame.get_data())
+                d_raw = np.asanyarray(depth_frame.get_data()) # 16-bit raw units
+                h, w = color_image.shape[:2]
 
             frame_count += 1
             if frame_count % 15 == 0:
                 fps = 15.0 / (time.time() - fps_start)
                 fps_start = time.time()
-
-            color_image = np.asanyarray(color_frame.get_data())
-            d_raw = np.asanyarray(depth_frame.get_data()) # 16-bit raw units
-            h, w = color_image.shape[:2]
 
             with state.lock:
                 black_mode = state.black_screw_mode
@@ -1278,7 +1334,7 @@ def run_vision_loop(headless=False):
                 all_z.append(z_mm)
 
                 # 3D Deprojection (Camera Optical Frame)
-                pt_3d = rs.rs2_deproject_pixel_to_point(intrinsics, [cx, cy], z_m)
+                pt_3d = deproject_pixel_to_point(intrinsics, [cx, cy], z_m)
                 x_3d_mm = pt_3d[0] * 1000.0
                 y_3d_mm = pt_3d[1] * 1000.0
 
@@ -1290,12 +1346,51 @@ def run_vision_loop(headless=False):
                 y_tbl_mm = float(pt_table[1])
                 dist_center_mm = float(np.linalg.norm(pt_table[:2]))
 
+                # Head Orientation & Direction Vector via Moments & Major Axis Analysis
+                M = cv2.moments(cnt)
+                mcx = M['m10'] / (M['m00'] + 1e-5)
+                mcy = M['m01'] / (M['m00'] + 1e-5)
+
                 # Cross-sectional profiling for Shank vs Head Diameter
                 deg = angle
                 r_w, r_h = rw, rh
                 if r_w < r_h:
                     deg = deg + 90
                     r_w, r_h = r_h, r_w
+                    major_len = rh
+                    axis_angle = math.radians(angle + 90)
+                else:
+                    major_len = rw
+                    axis_angle = math.radians(angle)
+
+                ux = math.cos(axis_angle)
+                uy = math.sin(axis_angle)
+
+                # Direction vector from bounding box center to centroid (pulled towards heavy Head)
+                d_cm_x = mcx - rcx
+                d_cm_y = mcy - rcy
+                dot_val = d_cm_x * ux + d_cm_y * uy
+
+                if dot_val < 0:
+                    head_ux = -ux
+                    head_uy = -uy
+                else:
+                    head_ux = ux
+                    head_uy = uy
+
+                head_px_x = rcx + head_ux * (major_len * 0.42)
+                head_px_y = rcy + head_uy * (major_len * 0.42)
+                tip_px_x = rcx - head_ux * (major_len * 0.42)
+                tip_px_y = rcy - head_uy * (major_len * 0.42)
+
+                heading_deg = float(math.degrees(math.atan2(head_uy, head_ux)))
+
+                # Table Coordinates of Head & Tip
+                pt_head_3d = deproject_pixel_to_point(intrinsics, [head_px_x, head_px_y], z_m)
+                pt_head_tbl = np.dot(R_cur, np.array([pt_head_3d[0]*1000.0, pt_head_3d[1]*1000.0, z_mm])) - orig_cur
+
+                pt_tip_3d = deproject_pixel_to_point(intrinsics, [tip_px_x, tip_px_y], z_m)
+                pt_tip_tbl = np.dot(R_cur, np.array([pt_tip_3d[0]*1000.0, pt_tip_3d[1]*1000.0, z_mm])) - orig_cur
 
                 pad = 40
                 bx1, by1 = max(0, cx_i - pad), max(0, cy_i - pad)
@@ -1305,8 +1400,8 @@ def run_vision_loop(headless=False):
                 cv2.drawContours(local_mask, [shifted_cnt], -1, 255, -1)
 
                 sub_cx, sub_cy = rcx - bx1, rcy - by1
-                M = cv2.getRotationMatrix2D((sub_cx, sub_cy), deg, 1.0)
-                rotated = cv2.warpAffine(local_mask, M, (local_mask.shape[1], local_mask.shape[0]))
+                M_rot = cv2.getRotationMatrix2D((sub_cx, sub_cy), deg, 1.0)
+                rotated = cv2.warpAffine(local_mask, M_rot, (local_mask.shape[1], local_mask.shape[0]))
                 cols = np.sum(rotated > 0, axis=0)
                 active = cols[cols > 3]
 
@@ -1328,13 +1423,33 @@ def run_vision_loop(headless=False):
                 if cls_name:
                     box = np.int32(cv2.boxPoints(rect))
                     cv2.drawContours(vis, [box], 0, color, 2)
-                    cv2.drawMarker(vis, (cx_i, cy_i), (0, 0, 255), cv2.MARKER_CROSS, 10, 2)
+                    
+                    hx_i, hy_i = int(round(head_px_x)), int(round(head_px_y))
+                    tx_i, ty_i = int(round(tip_px_x)), int(round(tip_px_y))
 
-                    # Text Overlay with Calibrated Table 2D Coordinates
+                    # 1. Direction arrow along shank towards HEAD (Cyan)
+                    cv2.arrowedLine(vis, (tx_i, ty_i), (hx_i, hy_i), (0, 240, 255), 2, tipLength=0.32)
+
+                    # 2. Head marker (Emerald Green circle with black outline)
+                    cv2.circle(vis, (hx_i, hy_i), 5, (0, 0, 0), -1)
+                    cv2.circle(vis, (hx_i, hy_i), 4, (0, 255, 128), -1)
+
+                    # 3. Tip marker (Crimson Red circle with black outline)
+                    cv2.circle(vis, (tx_i, ty_i), 4, (0, 0, 0), -1)
+                    cv2.circle(vis, (tx_i, ty_i), 3, (0, 60, 255), -1)
+
+                    # 4. Center cross marker
+                    cv2.drawMarker(vis, (cx_i, cy_i), (255, 255, 255), cv2.MARKER_CROSS, 6, 1)
+
+                    # 5. Text Overlay with Calibrated Table 2D Coordinates (Clean Orange & Sky Blue, No Green Text)
                     info_line1 = f"{cls_name} [d={shank_dia_mm:.1f}mm]"
                     info_line2 = f"Tbl: [{x_tbl_mm:+.1f}, {y_tbl_mm:+.1f}]mm | r={dist_center_mm:.1f}"
-                    cv2.putText(vis, info_line1, (cx_i - 45, cy_i - 18), cv2.FONT_HERSHEY_SIMPLEX, 0.44, color, 2)
-                    cv2.putText(vis, info_line2, (cx_i - 45, cy_i - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (56, 189, 248), 1)
+                    off_x = -45
+                    off_y = -18
+                    if cx_i > w - 140: off_x = -130
+                    if cy_i < 50: off_y = 35
+                    cv2.putText(vis, info_line1, (cx_i + off_x, cy_i + off_y), cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
+                    cv2.putText(vis, info_line2, (cx_i + off_x, cy_i + off_y + 13), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (56, 189, 248), 1, cv2.LINE_AA)
 
                     detected_items.append({
                         "class": cls_name,
@@ -1345,6 +1460,13 @@ def run_vision_loop(headless=False):
                         "y_3d": float(y_3d_mm),
                         "z_3d": float(z_mm),
                         "angle": float(deg),
+                        "head_angle_deg": float(heading_deg),
+                        "head_x_tbl": float(pt_head_tbl[0]),
+                        "head_y_tbl": float(pt_head_tbl[1]),
+                        "tip_x_tbl": float(pt_tip_tbl[0]),
+                        "tip_y_tbl": float(pt_tip_tbl[1]),
+                        "head_px": [hx_i, hy_i],
+                        "tip_px": [tx_i, ty_i],
                         "head_dia": float(head_dia_mm),
                         "shank_dia": float(shank_dia_mm),
                         "length": float(tot_l_mm)
@@ -1431,10 +1553,14 @@ def run_vision_loop(headless=False):
                 wr.release()
             except Exception:
                 pass
-        pipeline.stop()
+        if not offline_mode and profile is not None:
+            try:
+                pipeline.stop()
+            except Exception:
+                pass
         if gui_enabled:
             cv2.destroyAllWindows()
-        print("[INFO] D405 Pipeline stopped successfully.")
+        print("[INFO] Clean shutdown complete.")
 
 def run_flask_app(port):
     app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
