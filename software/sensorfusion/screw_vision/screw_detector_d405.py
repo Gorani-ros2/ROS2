@@ -51,7 +51,7 @@ class VisionState:
         self.avg_depth_mm = 0.0
         self.detections = []
         self.black_screw_mode = True
-        self.thresh_val = 110
+        self.thresh_val = 95
         self.auto_foam_roi = True
         self.snapshot_saved = None
         
@@ -73,6 +73,9 @@ class VisionState:
         self.record_file_path = ""
         self.record_filename = ""
         self.recorded_frames = 0
+        self.raw_color_frame = None
+        self.raw_depth_frame = None
+        self.debug_rejected = []
 
 state = VisionState()
 RECORDINGS_DIR = os.path.expanduser("~/Videos/Recordings")
@@ -406,10 +409,10 @@ HTML_TEMPLATE = """
                 <h3>Live Vision Controls</h3>
                 
                 <div class="control-group">
-                    <label>Binary Threshold Value (<span id="thresh-display">90</span>)</label>
+                    <label>Binary Threshold Value (<span id="thresh-display">95</span>)</label>
                     <div class="slider-row">
-                        <input type="range" id="thresh-slider" min="20" max="230" value="90" oninput="updateThresh(this.value)">
-                        <span class="slider-val" id="thresh-num">90</span>
+                        <input type="range" id="thresh-slider" min="20" max="230" value="95" oninput="updateThresh(this.value)">
+                        <span class="slider-val" id="thresh-num">95</span>
                     </div>
                 </div>
 
@@ -903,12 +906,27 @@ def api_toggle_roi():
 
 @app.route('/api/snapshot', methods=['POST'])
 def api_snapshot():
-    fname = f"d405_screw_snap_{int(time.time())}.png"
+    ts = int(time.time())
+    fname = f"d405_screw_snap_{ts}.png"
+    raw_fname = f"d405_raw_{ts}.png"
+    depth_fname = f"d405_depth_{ts}.npy"
     with state.lock:
         if state.current_frame is not None:
             cv2.imwrite(fname, state.current_frame)
-            return jsonify({"success": True, "filename": fname})
+            if state.raw_color_frame is not None:
+                cv2.imwrite(raw_fname, state.raw_color_frame)
+            if state.raw_depth_frame is not None:
+                np.save(depth_fname, state.raw_depth_frame)
+            return jsonify({"success": True, "filename": fname, "raw": raw_fname, "depth": depth_fname})
     return jsonify({"success": False, "error": "No frame available"})
+
+@app.route('/api/debug_rejected')
+def api_debug_rejected():
+    with state.lock:
+        return jsonify({
+            "detected_count": state.m4_count,
+            "rejected_contours": state.debug_rejected
+        })
 
 # ==============================================================================
 # Robot Automation Endpoints (Duco-910 Web Telemetry & Control Bridge)
@@ -1261,11 +1279,12 @@ def run_vision_loop(headless=False):
             detected_items = []
             m4_count = 0
             all_z = []
+            rejected_items = []
 
             for cnt in contours:
                 area = cv2.contourArea(cnt)
-                # Filter noise (<200px) and table background (>10000px)
-                if area < 200 or area > 10000:
+                # Filter noise (<150px) and table background (>10000px)
+                if area < 150 or area > 10000:
                     continue
 
                 (cx, cy), radius = cv2.minEnclosingCircle(cnt)
@@ -1273,17 +1292,17 @@ def run_vision_loop(headless=False):
                 if cx_i < 50 or cx_i >= w - 50 or cy_i < 15 or cy_i >= h - 15:
                     continue
 
-                # Elongated aspect ratio filter (strictly rejects circles, standing nuts, and square text characters)
                 rect = cv2.minAreaRect(cnt)
                 (rcx, rcy), (rw, rh), angle = rect
                 ar = max(rw, rh) / (min(rw, rh) + 1e-5)
-                if ar < 1.8:
+                if ar < 1.6:
+                    rejected_items.append({"pos": [cx_i, cy_i], "reason": f"AR ({ar:.2f}) < 1.6", "area": area})
                     continue
 
-                # Solidity filter (strictly rejects hollow/branched printed text letters like '밭', '농', etc.)
                 hull = cv2.convexHull(cnt)
                 solidity = float(area) / (cv2.contourArea(hull) + 1e-5)
-                if solidity < 0.70:
+                if solidity < 0.65:
+                    rejected_items.append({"pos": [cx_i, cy_i], "reason": f"Solidity ({solidity:.2f}) < 0.65", "area": area, "ar": ar})
                     continue
 
                 # Query Real Sub-millimeter Depth with Perimeter Fallback
@@ -1313,13 +1332,18 @@ def run_vision_loop(headless=False):
                         if roi_vals:
                             z_m = float(np.median(roi_vals))
                         else:
+                            rejected_items.append({"pos": [cx_i, cy_i], "reason": "depth_invalid", "area": area})
                             continue
 
                 z_mm = z_m * 1000.0
 
-                # Reject objects on the lower table surface (e.g. table stickers, printed label text at Z~307mm)
-                # Foam pad surface is at Z ~291..296mm; table surface is ~15mm lower at Z ~307mm.
-                if z_mm > 302.0:
+                # Reject table stickers/letters on the upper table surface outside foam (Y < 110 at Z ~307mm)
+                if cy_i < 110 and z_mm > 300.0:
+                    rejected_items.append({"pos": [cx_i, cy_i], "reason": f"table_sticker ({z_mm:.1f}mm)", "area": area})
+                    continue
+                # General depth limit
+                if z_mm > 325.0:
+                    rejected_items.append({"pos": [cx_i, cy_i], "reason": f"z_mm ({z_mm:.1f}) > 325.0", "area": area})
                     continue
 
                 # Physical dimensions in mm
@@ -1329,6 +1353,7 @@ def run_vision_loop(headless=False):
 
                 # Strict M4 screw physical dimensions: Length 14~28mm, Width 4.0~9.5mm, Area 50~125mm^2
                 if not (14.0 <= tot_l_mm <= 28.0 and 4.0 <= tot_w_mm <= 9.5 and 50.0 <= area_mm2 <= 125.0):
+                    rejected_items.append({"pos": [cx_i, cy_i], "reason": f"dims L={tot_l_mm:.1f}, W={tot_w_mm:.1f}, A={area_mm2:.1f}", "area": area})
                     continue
 
                 all_z.append(z_mm)
@@ -1491,6 +1516,9 @@ def run_vision_loop(headless=False):
             with state.lock:
                 state.current_frame = vis
                 state.current_mask = screw_mask
+                state.raw_color_frame = color_image
+                state.raw_depth_frame = d_raw
+                state.debug_rejected = rejected_items
                 state.fps = fps
                 state.m4_count = m4_count
                 state.avg_depth_mm = avg_z
