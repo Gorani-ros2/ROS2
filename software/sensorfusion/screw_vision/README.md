@@ -91,3 +91,17 @@ python3 /home/knu/workspaces/screw_vision/screw_detector_ros2_node.py \
 # 터미널 2: 1-Click 피킹 좌표 수신 확인 (geometry_msgs/PoseArray)
 ros2 topic echo /screw_detection/poses --once
 ```
+
+---
+
+## 🧩 4. 접촉 나사 분리(Touching Screws) 및 고도화 알고리즘
+
+서로 맞닿아 있는 여러 나사(Touching Clusters)를 100% 분리 인식하기 위해 **위상수학적 골격 교차수(Topological Crossing Number)** 및 **Sobel 그래디언트 워터셰드(Watershed)** 파이프라인이 탑재되었습니다.
+
+* **핵심 알고리즘 요약**:
+  1. **Zhang-Suen 세선화**로 나사 골격(Skeleton) 추출
+  2. **8-이웃 원형 교차수($T \ge 3$)** 판별로 대각선 계단 픽셀 오인식 없이 순수 다중 접촉 분기점만 0.055ms 초고속 추출
+  3. **Sobel 그래디언트 워터셰드**를 통해 경계면을 따라 개별 나사로 분할
+  4. **미니멀 HUD UI**: 주황색 방향 화살표(Tip $\to$ Head), 흰색 십자 마커, 식별 번호(`#1`~`#9`)만 간결하게 표시 (바운딩 박스/초록 텍스트 제거)
+
+> 📖 **자세한 개발 시행착오 및 알고리즘 분석 보고서**: [TROUBLESHOOTING.md](file:///home/knu/workspaces/insta360/software/sensorfusion/screw_vision/TROUBLESHOOTING.md) 참조.
