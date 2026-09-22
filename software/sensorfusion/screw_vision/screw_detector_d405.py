@@ -1446,24 +1446,13 @@ def run_vision_loop(headless=False):
                 m4_count += 1
 
                 if cls_name:
-                    box = np.int32(cv2.boxPoints(rect))
-                    cv2.drawContours(vis, [box], 0, color, 2)
-                    
                     hx_i, hy_i = int(round(head_px_x)), int(round(head_px_y))
                     tx_i, ty_i = int(round(tip_px_x)), int(round(tip_px_y))
 
-                    # 1. Direction arrow along shank towards HEAD (Cyan)
-                    cv2.arrowedLine(vis, (tx_i, ty_i), (hx_i, hy_i), (0, 240, 255), 2, tipLength=0.32)
+                    # 1. Direction arrow along shank towards HEAD (Orange)
+                    cv2.arrowedLine(vis, (tx_i, ty_i), (hx_i, hy_i), (0, 165, 255), 2, tipLength=0.32)
 
-                    # 2. Head marker (Emerald Green circle with black outline)
-                    cv2.circle(vis, (hx_i, hy_i), 5, (0, 0, 0), -1)
-                    cv2.circle(vis, (hx_i, hy_i), 4, (0, 255, 128), -1)
-
-                    # 3. Tip marker (Crimson Red circle with black outline)
-                    cv2.circle(vis, (tx_i, ty_i), 4, (0, 0, 0), -1)
-                    cv2.circle(vis, (tx_i, ty_i), 3, (0, 60, 255), -1)
-
-                    # 4. Center cross marker
+                    # 2. Center cross marker
                     cv2.drawMarker(vis, (cx_i, cy_i), (255, 255, 255), cv2.MARKER_CROSS, 6, 1)
 
                     # 5. Text Overlay with Calibrated Table 2D Coordinates (Clean Orange & Sky Blue, No Green Text)
