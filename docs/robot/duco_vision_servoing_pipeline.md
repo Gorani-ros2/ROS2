@@ -22,10 +22,10 @@
 
 ---
 
-## 🚫 2. 2D 인쇄 글자 ("밭농업기계개발연구센터") 오탐 원천 차단 필터
+## 🚫 2. 작업대 표면 라벨 스티커 및 인쇄 글자 오탐 원천 차단 필터
 
 ### 2.1 오탐 발생 원인
-- 작업대 상단에 부착된 백색 라벨 스티커 `"밭농업기계개발연구센터 (UPLAND-FIELD MACHINERY RESEARCH CENTER)"`의 흑색 글자(예: '개')가 나사 검출기의 가로/세로 크기 조건($3.2 \sim 5.2\text{ mm}$)에 부합하여 M4 나사로 오검출되는 현상 식별.
+- 작업대 상단에 부착된 안내 라벨 스티커의 흑색 인쇄 텍스트 글자(예: '개')가 나사 검출기의 가로/세로 크기 조건($3.2 \sim 5.2\text{ mm}$)에 부합하여 M4 나사로 오검출되는 현상 식별.
 
 ### 2.2 3중 필터링 알고리즘 적용
 1. **작업대 심도 분리 필터 (Table Depth Filter)**:
@@ -151,7 +151,7 @@
   1. *대안 A (녹화 후 ffmpeg `webm2mp4` 자동 변환)*: 재생 호환성은 확보되나, 웹 브라우저 테두리와 마우스 커서가 찍히는 문제는 해결 불가.
   2. *대안 B (OBS Studio 윈도우 캡처)*: 별도 무거운 프로그램 실행 및 윈도우 캡처 영역 설정 번거로움.
 * **선택된 해결책: 비전 엔진 파이프라인 내장 H.264 MP4 직접 녹화 (`cv2.VideoWriter(avc1)`) + 순회 자동 연동**:
-  - `screw_detector_d405.py` 프레임 루프에서 순수 $1280 \times 720$ 30fps 고화질 H.264 표준 MP4 코덱으로 디스크([~/Videos/Recordings/](file:///home/knu/Videos/Recordings/))에 직접 기록.
+  - `screw_detector_d405.py` 프레임 루프에서 순수 $1280 \times 720$ 30fps 고화질 H.264 표준 MP4 코덱으로 디스크(`~/Videos/Recordings/`)에 직접 기록.
   - 마우스 커서, 브라우저 UI 일체 배제, 순수 검출 오버레이 영상만 방송용 화질로 저장.
   - **순회 자동 연동**: 웹 UI에서 `[x] 🎬 순회 시 자동 녹화`가 켜져 있으면, `⚡ 중심 우선 최근접 연속 순회` 클릭 즉시 자동으로 녹화가 시작되고, 전 나사 완주 후 `m4_view`로 복귀하면 자동으로 녹화 종료 및 MP4 저장/다운로드 링크 제공.
 
@@ -228,14 +228,14 @@ flowchart TD
 ### 7.2 터미널 CLI 1줄 실행 명령어
 ```bash
 # 1. 로봇 상태 및 연결 점검
-python3 /home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py status
+python3 duco_pipeline.py status
 
 # 2. 중심 우선 최근접 연속 순회 (5배속 실행)
-python3 /home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py nn_center --speed 5.0 --execute
+python3 duco_pipeline.py nn_center --speed 5.0 --execute
 
 # 3. 외곽 스위프 최근접 연속 순회 (10배속 고속 실행)
-python3 /home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py nn_sweep --speed 10.0 --execute
+python3 duco_pipeline.py nn_sweep --speed 10.0 --execute
 
 # 4. 중심 최근접 1개 나사만 10mm 초근접 단일 접근
-python3 /home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py single_servo --speed 3.0 --execute
+python3 duco_pipeline.py single_servo --speed 3.0 --execute
 ```

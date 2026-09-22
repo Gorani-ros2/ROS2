@@ -913,7 +913,8 @@ def api_snapshot():
 # ==============================================================================
 # Robot Automation Endpoints (Duco-910 Web Telemetry & Control Bridge)
 # ==============================================================================
-SPEED_CONFIG_PATH = "/home/knu/workspaces/duco_ros2_control_ws/config/duco_speed.json"
+SPEED_CONFIG_PATH = os.path.expanduser("~/workspaces/duco_ros2_control_ws/config/duco_speed.json")
+PIPELINE_SCRIPT_PATH = os.path.expanduser("~/workspaces/duco_ros2_control_ws/duco_pipeline.py")
 
 @app.route('/api/robot/speed', methods=['GET', 'POST'])
 def api_robot_speed():
@@ -942,7 +943,7 @@ def api_robot_speed():
 def api_robot_status():
     import subprocess
     try:
-        res = subprocess.run(["python3", "/home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py", "status"], 
+        res = subprocess.run(["python3", PIPELINE_SCRIPT_PATH, "status"], 
                              capture_output=True, text=True, timeout=5)
         out = res.stdout
         tcp = None
@@ -964,7 +965,7 @@ def api_robot_action(action):
     if action not in ["step1_level", "step2_set_view", "step3_home", "step4_view", "nn_center", "nn_sweep", "single_servo"]:
         return jsonify({"success": False, "error": f"Invalid action: {action}"}), 400
     
-    cmd = ["python3", "/home/knu/workspaces/duco_ros2_control_ws/duco_pipeline.py", action, "--execute"]
+    cmd = ["python3", PIPELINE_SCRIPT_PATH, action, "--execute"]
 
     # Inject active speed multiplier
     speed_mult = 2.0
@@ -1260,7 +1261,7 @@ def run_vision_loop(headless=False):
 
                 z_mm = z_m * 1000.0
 
-                # Reject objects on the lower table surface (e.g. table stickers, text like "밭농업기계개발연구센터" at Z~307mm)
+                # Reject objects on the lower table surface (e.g. table stickers, printed label text at Z~307mm)
                 # Foam pad surface is at Z ~291..296mm; table surface is ~15mm lower at Z ~307mm.
                 if z_mm > 302.0:
                     continue

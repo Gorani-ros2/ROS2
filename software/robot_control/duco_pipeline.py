@@ -19,10 +19,10 @@ import urllib.request
 import argparse
 import numpy as np
 
-sys.path.insert(0, "/home/knu/workspaces/duco_ros2_control_ws")
+sys.path.insert(0, os.path.expanduser("~/workspaces/duco_ros2_control_ws"))
 from duco_controller import DucoController, CONFIG_PATH
 
-SPEED_CONFIG_PATH = "/home/knu/workspaces/duco_ros2_control_ws/config/duco_speed.json"
+SPEED_CONFIG_PATH = os.path.expanduser("~/workspaces/duco_ros2_control_ws/config/duco_speed.json")
 VISION_API_STATUS = "http://localhost:5000/api/status"
 
 def get_speed_multiplier(cli_speed=None):
