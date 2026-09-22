@@ -322,7 +322,10 @@ def cmd_step5_nn_tour(controller, start_mode="center", max_targets=None, execute
         print("  [DRY RUN] IK verification successful. Skipping physical motion.")
         return True
 
-    # Execution Loop
+    # Execution Loop with Visited Spatial Memory Filter
+    visited_history = []  # Tracks absolute [X_base, Y_base] of already visited screws
+    EXCLUSION_RADIUS_MM = 20.0  # M4 screw is ~8mm dia; 20mm radius strictly prevents revisiting prior screws
+
     for idx, (target_xy, target_meta) in enumerate(waypoints_plan):
         print(f"\n-------------------------------------------------------")
         print(f"  🎯 [{idx+1}/{len(waypoints_plan)}] Visiting Screw: Table=[{target_meta['x_tbl']:+.1f}, {target_meta['y_tbl']:+.1f}]mm (r={target_meta['dist_center']:.1f}mm)")
@@ -338,24 +341,49 @@ def cmd_step5_nn_tour(controller, start_mode="center", max_targets=None, execute
         controller.movel(target_mid, vel_m_s=vel_travel_m_s, acc_m_s2=acc_travel_m_s2, block=True)
         time.sleep(0.2)
 
-        # Mid-altitude zeroing
+        # Mid-altitude zeroing with Visited Spatial Exclusion Filter
         print(f"  🔍 [2/5] Re-measuring target at Z={MID_Z}mm for sub-mm zeroing...")
         final_xy = [target_xy[0], target_xy[1]]
         mid_screws, _ = query_vision_screws()
         if mid_screws:
-            nearest_s = min(mid_screws, key=lambda s: s['x_3d']**2 + s['y_3d']**2)
-            d_err = math.hypot(nearest_s['x_3d'], nearest_s['y_3d'])
-            print(f"    🎯 Target detected below camera: Cam=[{nearest_s['x_3d']:+.2f}, {nearest_s['y_3d']:+.2f}]mm (Residual={d_err:.2f}mm)")
-            if d_err < 35.0:
-                dx_corr = c_th * nearest_s['x_3d'] + s_th * nearest_s['y_3d']
-                dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
-                final_xy = [target_xy[0] + dx_corr, target_xy[1] + dy_corr]
-                print(f"    ✨ Zeroing residual offset: [ΔX={dx_corr:+.2f}, ΔY={dy_corr:+.2f}] mm")
-                target_mid_corr = [final_xy[0], final_xy[1], MID_Z, rx, ry, rz]
-                controller.movel(target_mid_corr, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
-                time.sleep(0.2)
+            # Filter out any detected screws within EXCLUSION_RADIUS_MM of already visited locations!
+            unvisited_candidates = []
+            for ms in mid_screws:
+                cand_dx = c_th * ms['x_3d'] + s_th * ms['y_3d']
+                cand_dy = s_th * ms['x_3d'] - c_th * ms['y_3d']
+                cand_xy = [target_mid[0] + cand_dx, target_mid[1] + cand_dy]
+
+                is_already_visited = False
+                for v_xy in visited_history:
+                    if math.hypot(cand_xy[0] - v_xy[0], cand_xy[1] - v_xy[1]) < EXCLUSION_RADIUS_MM:
+                        is_already_visited = True
+                        break
+
+                if not is_already_visited:
+                    unvisited_candidates.append(ms)
+                else:
+                    print(f"    🚫 Ignored nearby screw at Cam=[{ms['x_3d']:+.1f}, {ms['y_3d']:+.1f}]mm: ALREADY VISITED!")
+
+            if unvisited_candidates:
+                nearest_s = min(unvisited_candidates, key=lambda s: s['x_3d']**2 + s['y_3d']**2)
+                d_err = math.hypot(nearest_s['x_3d'], nearest_s['y_3d'])
+                print(f"    🎯 Target detected below camera: Cam=[{nearest_s['x_3d']:+.2f}, {nearest_s['y_3d']:+.2f}]mm (Residual={d_err:.2f}mm)")
+                if d_err < 35.0:
+                    dx_corr = c_th * nearest_s['x_3d'] + s_th * nearest_s['y_3d']
+                    dy_corr = s_th * nearest_s['x_3d'] - c_th * nearest_s['y_3d']
+                    final_xy = [target_mid[0] + dx_corr, target_mid[1] + dy_corr]
+                    print(f"    ✨ Zeroing residual offset: [ΔX={dx_corr:+.2f}, ΔY={dy_corr:+.2f}] mm")
+                    target_mid_corr = [final_xy[0], final_xy[1], MID_Z, rx, ry, rz]
+                    controller.movel(target_mid_corr, vel_m_s=vel_mid_m_s, acc_m_s2=acc_mid_m_s2, block=True)
+                    time.sleep(0.2)
+            else:
+                print(f"    ℹ️ All nearby detections were already visited; continuing with planned waypoint...")
         else:
             print(f"    ⚠️ No screw detected at mid-altitude, maintaining planned trajectory...")
+
+        # Mark this location in spatial history so it can NEVER be revisited or confused
+        visited_history.append([final_xy[0], final_xy[1]])
+        print(f"  🏷️ Locked Target #{idx+1} as [VISITED] (Total Visited: {len(visited_history)}/{len(waypoints_plan)})")
 
         # Vertical descent to 10mm clearance
         print(f"  🚀 [3/5] Vertical descent to 10mm clearance (Z={SAFE_FLOOR_Z}mm)...")
