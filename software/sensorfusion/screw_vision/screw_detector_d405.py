@@ -30,7 +30,7 @@ except ImportError:
     print("[ERROR] pyrealsense2 is not installed!")
     sys.exit(1)
 
-from flask import Flask, Response, render_template_string, jsonify, request
+from flask import Flask, Response, render_template_string, jsonify, request, send_from_directory
 import logging
 
 # Suppress flask request logging in terminal for cleaner output
@@ -66,7 +66,78 @@ class VisionState:
         self.origin_level = np.zeros(3)
         self.recalib_requested = True
 
+        # Video Recording State (Direct H.264 MP4)
+        self.is_recording = False
+        self.video_writer = None
+        self.record_start_time = 0.0
+        self.record_file_path = ""
+        self.record_filename = ""
+        self.recorded_frames = 0
+
 state = VisionState()
+RECORDINGS_DIR = os.path.expanduser("~/Videos/Recordings")
+
+def start_recording():
+    with state.lock:
+        if state.is_recording:
+            return False, "이미 녹화 중입니다."
+        os.makedirs(RECORDINGS_DIR, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"d405_screw_tour_{timestamp}.mp4"
+        filepath = os.path.join(RECORDINGS_DIR, filename)
+        
+        # Try native hardware/standard H.264 (avc1) first, fallback to mp4v
+        writer = None
+        for codec in ['avc1', 'mp4v']:
+            fourcc = cv2.VideoWriter_fourcc(*codec)
+            candidate = cv2.VideoWriter(filepath, fourcc, 30.0, (1280, 720))
+            if candidate.isOpened():
+                writer = candidate
+                break
+            candidate.release()
+            
+        if writer is None or not writer.isOpened():
+            return False, "VideoWriter 초기화에 실패했습니다."
+            
+        state.video_writer = writer
+        state.record_file_path = filepath
+        state.record_filename = filename
+        state.record_start_time = time.time()
+        state.recorded_frames = 0
+        state.is_recording = True
+        print(f"\n[INFO] 🎬 D405 Video Recording STARTED: {filepath}")
+        return True, filename
+
+def stop_recording():
+    with state.lock:
+        if not state.is_recording:
+            return False, {"message": "녹화 중이 아닙니다."}
+        writer = state.video_writer
+        state.video_writer = None
+        state.is_recording = False
+        dur = round(time.time() - state.record_start_time, 1)
+        frames = state.recorded_frames
+        filename = state.record_filename
+        filepath = state.record_file_path
+        
+    if writer is not None:
+        try:
+            writer.release()
+        except Exception:
+            pass
+            
+    size_mb = 0.0
+    if os.path.exists(filepath):
+        size_mb = round(os.path.getsize(filepath) / (1024 * 1024), 2)
+        
+    print(f"\n[INFO] ⏹️ D405 Video Recording STOPPED: {filename} ({dur}s, {frames} frames, {size_mb} MB)")
+    return True, {
+        "filename": filename,
+        "filepath": filepath,
+        "duration": dur,
+        "frames": frames,
+        "size_mb": size_mb
+    }
 
 # ==============================================================================
 # Flask Web Application (1-Click Verification)
@@ -301,11 +372,31 @@ HTML_TEMPLATE = """
         <!-- Live Video Stream -->
         <div class="feed-container">
             <div class="feed-header">
-                <h3>Live Calibrated RGB-D Stream</h3>
-                <span style="font-size: 12px; color: var(--text-dim);">1280 × 720 @ 30fps</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <h3>Live Calibrated RGB-D Stream</h3>
+                    <span id="rec-badge" style="display: none; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #fff; background: #dc2626; padding: 2px 8px; border-radius: 6px;">
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: pulse 1s infinite; display: inline-block;"></span>
+                        REC <span id="rec-timer">00:00</span>
+                    </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button id="rec-btn" class="btn" style="background: #dc2626; padding: 6px 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" onclick="toggleRecording()">
+                        <span id="rec-icon">🔴</span> <span id="rec-text">MP4 화면 녹화 시작</span>
+                    </button>
+                    <a href="/video_feed" target="_blank" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px; text-decoration: none;" title="웹 UI 없이 순수 영상만 새 창으로 열기">
+                        📺 단독 전체화면
+                    </a>
+                </div>
             </div>
             <div class="video-box">
                 <img src="/video_feed" alt="D405 Screw Stream" id="video-stream">
+            </div>
+            <!-- Recording Completed Bar -->
+            <div id="rec-info-bar" style="display: none; background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 8px 12px; margin-top: 8px; justify-content: space-between; align-items: center;">
+                <span id="rec-info-text" style="color: #38bdf8; font-size: 12px; font-weight: 600;">🎬 녹화 완료</span>
+                <div style="display: flex; gap: 8px;">
+                    <a id="rec-download-link" href="#" class="btn btn-primary" style="padding: 4px 10px; font-size: 11px; text-decoration: none;" download>💾 MP4 다운로드</a>
+                </div>
             </div>
         </div>
 
@@ -383,7 +474,10 @@ HTML_TEMPLATE = """
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <label style="font-size: 12px; color: #c084fc; font-weight: 700; display: block;">5️⃣ 지능형 최근접 이웃 (Nearest-Neighbor) 연속 순회</label>
-                        <span style="font-size: 10px; background: rgba(168,85,247,0.25); color: #e9d5ff; padding: 2px 6px; border-radius: 4px; font-weight: 600;">3D 대각 + 100mm 횡이동</span>
+                        <label style="font-size: 11px; color: #94a3b8; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                            <input type="checkbox" id="auto-rec-tour" checked style="accent-color: #ef4444; cursor: pointer;">
+                            🎬 순회 시 자동 녹화
+                        </label>
                     </div>
                     <button class="btn btn-success" style="width: 100%; margin-bottom: 6px; font-weight: 600; padding: 9px 12px;" onclick="runRobot('nn_center')">
                         ⚡ 중심 우선 최근접 연속 순회 (Center-First NN)
@@ -474,25 +568,117 @@ HTML_TEMPLATE = """
                 });
         }
 
-        function runRobot(action) {
+        let isRecording = false;
+        let recTimerInterval = null;
+        let recSeconds = 0;
+
+        function updateRecTimer() {
+            recSeconds++;
+            const mins = String(Math.floor(recSeconds / 60)).padStart(2, '0');
+            const secs = String(recSeconds % 60).padStart(2, '0');
+            const el = document.getElementById('rec-timer');
+            if (el) el.innerText = `${mins}:${secs}`;
+        }
+
+        function setRecordingUI(active, info) {
+            isRecording = active;
+            const btn = document.getElementById('rec-btn');
+            const icon = document.getElementById('rec-icon');
+            const text = document.getElementById('rec-text');
+            const badge = document.getElementById('rec-badge');
+            const bar = document.getElementById('rec-info-bar');
+
+            if (active) {
+                if (btn) {
+                    btn.style.background = '#475569';
+                    if (icon) icon.innerText = '⏹️';
+                    if (text) text.innerText = '녹화 정지';
+                }
+                if (badge) badge.style.display = 'inline-flex';
+                recSeconds = 0;
+                const el = document.getElementById('rec-timer');
+                if (el) el.innerText = '00:00';
+                clearInterval(recTimerInterval);
+                recTimerInterval = setInterval(updateRecTimer, 1000);
+            } else {
+                if (btn) {
+                    btn.style.background = '#dc2626';
+                    if (icon) icon.innerText = '🔴';
+                    if (text) text.innerText = 'MP4 화면 녹화 시작';
+                }
+                if (badge) badge.style.display = 'none';
+                clearInterval(recTimerInterval);
+
+                if (info && info.filename && bar) {
+                    bar.style.display = 'flex';
+                    document.getElementById('rec-info-text').innerText = 
+                        `🎬 녹화 완료: ${info.filename} (${info.size_mb || 0} MB, ${info.duration || 0}초)`;
+                    const dlink = document.getElementById('rec-download-link');
+                    if (dlink) {
+                        dlink.href = `/api/recording/download/${encodeURIComponent(info.filename)}`;
+                        dlink.download = info.filename;
+                    }
+                }
+            }
+        }
+
+        function toggleRecording() {
+            fetch('/api/recording/toggle', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.status === 'started') {
+                        setRecordingUI(true);
+                    } else if (d.status === 'stopped') {
+                        setRecordingUI(false, d.info);
+                    }
+                })
+                .catch(e => console.error('Recording toggle error:', e));
+        }
+
+        async function runRobot(action) {
             const msg = document.getElementById('robot-msg');
             const badge = document.getElementById('robot-badge');
             badge.textContent = 'RUNNING';
             badge.style.background = '#d97706';
             msg.textContent = `🚀 로봇 [${action}] 실행 중...`;
-            fetch(`/api/robot/${action}`, { method: 'POST' })
-                .then(r => r.json())
-                .then(d => {
-                    msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '완료' : '실패'));
-                    badge.textContent = d.success ? 'READY' : 'ERROR';
-                    badge.style.background = d.success ? '#15803d' : '#dc2626';
-                    updateRobotStatus();
-                })
-                .catch(e => {
-                    msg.textContent = '❌ 통신 오류: ' + e;
-                    badge.textContent = 'ERROR';
-                    badge.style.background = '#dc2626';
-                });
+
+            const isTourAction = (action === 'nn_center' || action === 'nn_sweep' || action === 'single_servo');
+            const autoRec = document.getElementById('auto-rec-tour') && document.getElementById('auto-rec-tour').checked;
+            let startedAutoRec = false;
+
+            if (isTourAction && autoRec && !isRecording) {
+                try {
+                    const recRes = await fetch('/api/recording/toggle', { method: 'POST' });
+                    const recData = await recRes.json();
+                    if (recData.status === 'started') {
+                        setRecordingUI(true);
+                        startedAutoRec = true;
+                    }
+                } catch (e) {}
+            }
+
+            try {
+                const r = await fetch(`/api/robot/${action}`, { method: 'POST' });
+                const d = await r.json();
+                msg.textContent = (d.success ? '✅ ' : '❌ ') + (d.message || (d.success ? '완료' : '실패'));
+                badge.textContent = d.success ? 'READY' : 'ERROR';
+                badge.style.background = d.success ? '#15803d' : '#dc2626';
+                updateRobotStatus();
+            } catch (e) {
+                msg.textContent = '❌ 통신 오류: ' + e;
+                badge.textContent = 'ERROR';
+                badge.style.background = '#dc2626';
+            } finally {
+                if (startedAutoRec || (isTourAction && autoRec && isRecording)) {
+                    try {
+                        const stopRes = await fetch('/api/recording/toggle', { method: 'POST' });
+                        const stopData = await stopRes.json();
+                        if (stopData.status === 'stopped') {
+                            setRecordingUI(false, stopData.info);
+                        }
+                    } catch (e) {}
+                }
+            }
         }
 
         function getSpeedDesc(val) {
@@ -587,6 +773,9 @@ HTML_TEMPLATE = """
                         });
                         tbody.innerHTML = html;
                     }
+                    if (d.is_recording !== undefined && d.is_recording !== isRecording) {
+                        setRecordingUI(d.is_recording);
+                    }
                 })
                 .catch(() => {});
         }, 300);
@@ -646,8 +835,37 @@ def api_status():
             "detections": state.detections,
             "black_screw_mode": state.black_screw_mode,
             "thresh_val": state.thresh_val,
-            "auto_foam_roi": state.auto_foam_roi
+            "auto_foam_roi": state.auto_foam_roi,
+            "is_recording": state.is_recording
         })
+
+@app.route('/api/recording/status')
+def api_recording_status():
+    with state.lock:
+        dur = round(time.time() - state.record_start_time, 1) if state.is_recording else 0.0
+        return jsonify({
+            "is_recording": state.is_recording,
+            "filename": state.record_filename,
+            "filepath": state.record_file_path,
+            "duration": dur,
+            "frames": state.recorded_frames
+        })
+
+@app.route('/api/recording/toggle', methods=['POST'])
+def api_recording_toggle():
+    with state.lock:
+        rec = state.is_recording
+    if rec:
+        success, info = stop_recording()
+        return jsonify({"status": "stopped", "info": info})
+    else:
+        success, msg = start_recording()
+        return jsonify({"status": "started" if success else "error", "message": msg})
+
+@app.route('/api/recording/download/<path:filename>')
+def api_recording_download(filename):
+    clean_name = os.path.basename(filename)
+    return send_from_directory(RECORDINGS_DIR, clean_name, as_attachment=True)
 
 @app.route('/api/calibrate_plane', methods=['POST'])
 def api_calibrate_plane():
@@ -1142,10 +1360,11 @@ def run_vision_loop(headless=False):
                         (15, h - 52), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
             cv2.putText(vis, f"Detected M4: {m4_count} pcs | Z_avg: {avg_z:.1f}mm | Table Leveled: {'YES' if is_calib else 'PENDING'}", 
                         (15, h - 28), cv2.FONT_HERSHEY_SIMPLEX, 0.60, (0, 255, 255), 2)
-            cv2.putText(vis, "[Web: http://localhost:5000] | [C] Calib Plane | [B] Mode | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
+            cv2.putText(vis, "[Web: http://localhost:5000] | [REC: R] | [C] Calib | [B] Mode | [T]/[G] Thresh | [S] Snap | [Q] Quit", 
                         (15, h - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (180, 180, 180), 1)
 
             # Update Global State
+            writer_to_use = None
             with state.lock:
                 state.current_frame = vis
                 state.current_mask = screw_mask
@@ -1153,6 +1372,17 @@ def run_vision_loop(headless=False):
                 state.m4_count = m4_count
                 state.avg_depth_mm = avg_z
                 state.detections = detected_items
+                if state.is_recording and state.video_writer is not None:
+                    writer_to_use = state.video_writer
+
+            # Direct Video Recording (safe outside state lock)
+            if writer_to_use is not None:
+                try:
+                    writer_to_use.write(vis)
+                    with state.lock:
+                        state.recorded_frames += 1
+                except Exception as ve:
+                    print(f"[WARN] VideoWriter write failed: {ve}")
 
             # HighGUI window interaction
             if gui_enabled:
@@ -1162,6 +1392,13 @@ def run_vision_loop(headless=False):
                     print(f"[INFO] Exit requested via key 'q'")
                     state.running = False
                     break
+                elif key == ord('r'):
+                    with state.lock:
+                        rec = state.is_recording
+                    if rec:
+                        stop_recording()
+                    else:
+                        start_recording()
                 elif key == ord('c'):
                     with state.lock:
                         state.recalib_requested = True
@@ -1184,6 +1421,15 @@ def run_vision_loop(headless=False):
                     print(f"[INFO] Saved snapshot: {fname}")
 
     finally:
+        with state.lock:
+            wr = state.video_writer
+            state.video_writer = None
+            state.is_recording = False
+        if wr is not None:
+            try:
+                wr.release()
+            except Exception:
+                pass
         pipeline.stop()
         if gui_enabled:
             cv2.destroyAllWindows()
