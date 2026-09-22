@@ -27,15 +27,15 @@ VISION_API_STATUS = "http://localhost:5000/api/status"
 
 def get_speed_multiplier(cli_speed=None):
     if cli_speed is not None and cli_speed > 0:
-        return max(0.5, min(float(cli_speed), 3.5))
+        return max(0.5, min(float(cli_speed), 20.0))
     if os.path.exists(SPEED_CONFIG_PATH):
         try:
             with open(SPEED_CONFIG_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return max(0.5, min(float(data.get("speed_mult", 2.0)), 3.5))
+                return max(0.5, min(float(data.get("speed_mult", 5.0)), 20.0))
         except Exception:
             pass
-    return 2.0
+    return 5.0
 
 def query_vision_screws():
     """Query live detected M4 screws from local vision API."""
@@ -74,9 +74,9 @@ def cmd_status(controller):
 
 def cmd_step1_level_zero(controller, execute=True, speed_mult=2.0):
     """Step 1: Level robot TCP orientation to 0° perpendicular relative to workpiece table using D405 plane measurement."""
-    scale = speed_mult / 2.0
-    vel_deg = min(10.0 * scale, 30.0)
-    acc_deg = min(15.0 * scale, 45.0)
+    scale = speed_mult
+    vel_deg = min(10.0 * scale, 150.0)
+    acc_deg = min(15.0 * scale, 250.0)
     print(f"\n[STEP 1] Camera-Referenced Table Leveling (Target Tilt: 0.0° / 0.0°, speed: {vel_deg:.1f} deg/s)...")
     tcp = controller.get_tcp_pose()
     if not tcp:
@@ -146,9 +146,9 @@ def cmd_step2_set_m4_view(controller):
 
 def cmd_step3_move_home(controller, execute=True, speed_mult=2.0):
     """Step 3: Move to safe, compact folded standby home pose."""
-    scale = speed_mult / 2.0
-    vel_deg = min(20.0 * scale, 60.0)
-    acc_deg = min(30.0 * scale, 90.0)
+    scale = speed_mult
+    vel_deg = min(15.0 * scale, 180.0)
+    acc_deg = min(20.0 * scale, 300.0)
     print(f"\n[STEP 3] Moving to Compact Folded Standby Pose ('folded_home', speed: {vel_deg:.1f} deg/s)...")
     if "folded_home" not in controller.named_poses:
         print("[ERROR] 'folded_home' pose definition not found!")
@@ -178,11 +178,11 @@ def cmd_step3_move_home(controller, execute=True, speed_mult=2.0):
 
 def cmd_step4_move_m4_view(controller, execute=True, speed_mult=2.0):
     """Step 4: Return smoothly to 'm4_view' pose."""
-    scale = speed_mult / 2.0
-    vel_deg = min(20.0 * scale, 60.0)
-    acc_deg = min(30.0 * scale, 90.0)
-    vel_lift = min(0.06 * scale, 0.18)
-    acc_lift = min(0.10 * scale, 0.30)
+    scale = speed_mult
+    vel_deg = min(15.0 * scale, 180.0)
+    acc_deg = min(20.0 * scale, 300.0)
+    vel_lift = min(0.05 * scale, 0.80)
+    acc_lift = min(0.10 * scale, 2.0)
     print(f"\n[STEP 4] Returning to 'm4_view' Inspection Pose (speed: {vel_deg:.1f} deg/s)...")
     if "m4_view" not in controller.named_poses:
         print("[ERROR] 'm4_view' pose not registered yet! Run step 2 first.")
@@ -249,13 +249,13 @@ def cmd_step5_nn_tour(controller, start_mode="center", max_targets=None, execute
     8. Inter-target transit: Direct 3D diagonal linear glide from Z=100mm to next target Z=130mm (NO return to m4_view between screws!).
     9. After final screw: 3D diagonal linear ascent return to m4_view.
     """
-    scale = speed_mult / 2.0
-    vel_travel_m_s = min(0.06 * scale, 0.18)
-    acc_travel_m_s2 = min(0.10 * scale, 0.30)
-    vel_mid_m_s = min(0.04 * scale, 0.12)
-    acc_mid_m_s2 = min(0.08 * scale, 0.24)
-    vel_desc_m_s = min(0.03 * scale, 0.09)
-    acc_desc_m_s2 = min(0.06 * scale, 0.18)
+    scale = speed_mult
+    vel_travel_m_s = min(0.05 * scale, 1.00)   # up to 1,000 mm/s at 20x
+    acc_travel_m_s2 = min(0.12 * scale, 2.50)  # up to 2.5 m/s²
+    vel_mid_m_s = min(0.04 * scale, 0.60)     # up to 600 mm/s
+    acc_mid_m_s2 = min(0.10 * scale, 2.00)
+    vel_desc_m_s = min(0.025 * scale, 0.25)   # up to 250 mm/s
+    acc_desc_m_s2 = min(0.06 * scale, 1.00)
 
     mode_label = "중심 우선 (Center-First)" if start_mode == "center" else "외곽 스위프 (Corner-Sweep)"
     if max_targets == 1:
@@ -394,7 +394,7 @@ def main():
     parser.add_argument("action", choices=["status", "step1_level", "step2_set_view", "step3_home", "step4_view", "nn_center", "nn_sweep", "single_servo", "run_all"],
                         help="Action to execute")
     parser.add_argument("--execute", action="store_true", help="Execute actual robot motion (default is dry-run for safety)")
-    parser.add_argument("--speed", type=float, default=None, help="Speed multiplier (0.5 to 3.5, default reads from config or 2.0)")
+    parser.add_argument("--speed", type=float, default=None, help="Speed multiplier (0.5 to 20.0, default reads from config or 5.0)")
     args = parser.parse_args()
 
     speed_mult = get_speed_multiplier(args.speed)

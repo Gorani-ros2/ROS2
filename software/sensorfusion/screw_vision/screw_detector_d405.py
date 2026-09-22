@@ -355,18 +355,19 @@ HTML_TEMPLATE = """
                 <!-- Robot Speed Multiplier Control Card -->
                 <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <span style="font-size: 12px; font-weight: 600; color: #38bdf8;">⚡ 로봇 속도 배율 제어</span>
-                        <span id="speed-badge" style="font-size: 12px; font-weight: 700; color: #f59e0b;">2.0x [표준]</span>
+                        <span style="font-size: 12px; font-weight: 600; color: #38bdf8;">⚡ 로봇 속도 배율 제어 (최대 20배속)</span>
+                        <span id="speed-badge" style="font-size: 12px; font-weight: 700; color: #f59e0b;">5.0x [표준]</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                        <input type="range" id="speed-slider" min="0.5" max="3.5" step="0.5" value="2.0" style="flex: 1; accent-color: #38bdf8; cursor: pointer;" oninput="onSpeedSlider(this.value)">
+                        <input type="range" id="speed-slider" min="1.0" max="20.0" step="1.0" value="5.0" style="flex: 1; accent-color: #38bdf8; cursor: pointer;" oninput="onSpeedSlider(this.value)">
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;">
-                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(1.0)">🐢 1.0x</button>
-                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(1.5)">1.5x</button>
-                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(2.0)">⚡ 2.0x</button>
-                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(2.5)">2.5x</button>
-                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(3.0)">🚀 3.0x</button>
+                    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;">
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(1.0)">🐢 1x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(3.0)">3x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(5.0)">⚡ 5x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(10.0)">🚀 10x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px;" onclick="setSpeed(15.0)">🔥 15x</button>
+                        <button class="btn btn-secondary" style="padding: 4px 2px; font-size: 11px; color: #ef4444; font-weight: 700;" onclick="setSpeed(20.0)">⚡ 20x</button>
                     </div>
                 </div>
 
@@ -497,10 +498,11 @@ HTML_TEMPLATE = """
         function getSpeedDesc(val) {
             const v = parseFloat(val);
             if (v <= 1.0) return ' [거북이]';
-            if (v <= 1.5) return ' [안전]';
-            if (v <= 2.0) return ' [표준]';
-            if (v <= 2.5) return ' [쾌속]';
-            return ' [고속]';
+            if (v <= 3.0) return ' [안전]';
+            if (v <= 6.0) return ' [표준]';
+            if (v <= 10.0) return ' [쾌속]';
+            if (v <= 15.0) return ' [초고속]';
+            return ' [최대 20x]';
         }
 
         function onSpeedSlider(val) {
@@ -699,9 +701,9 @@ SPEED_CONFIG_PATH = "/home/knu/workspaces/duco_ros2_control_ws/config/duco_speed
 def api_robot_speed():
     if request.method == 'POST':
         data = request.get_json(silent=True) or {}
-        val = data.get('speed_mult', request.args.get('speed_mult', 2.0))
+        val = data.get('speed_mult', request.args.get('speed_mult', 5.0))
         try:
-            val = max(0.5, min(float(val), 3.5))
+            val = max(0.5, min(float(val), 20.0))
             os.makedirs(os.path.dirname(SPEED_CONFIG_PATH), exist_ok=True)
             with open(SPEED_CONFIG_PATH, 'w', encoding='utf-8') as f:
                 json.dump({"speed_mult": val}, f)
@@ -709,11 +711,11 @@ def api_robot_speed():
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 400
     else:
-        val = 2.0
+        val = 5.0
         if os.path.exists(SPEED_CONFIG_PATH):
             try:
                 with open(SPEED_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                    val = float(json.load(f).get("speed_mult", 2.0))
+                    val = float(json.load(f).get("speed_mult", 5.0))
             except Exception:
                 pass
         return jsonify({"speed_mult": val})
