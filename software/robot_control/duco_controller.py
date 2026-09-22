@@ -13,8 +13,8 @@ import time
 import ctypes
 import numpy as np
 
-SO_PATH = "/home/knu/workspaces/duco_ros2_control_ws/lib/libduco_bridge.so"
-CONFIG_PATH = "/home/knu/workspaces/duco_ros2_control_ws/config/duco_named_poses.json"
+SO_PATH = os.path.expanduser("~/workspaces/duco_ros2_control_ws/lib/libduco_bridge.so")
+CONFIG_PATH = os.path.expanduser("~/workspaces/duco_ros2_control_ws/config/duco_named_poses.json")
 
 class DucoController:
     def __init__(self, ip="192.168.1.10", port=7003):
