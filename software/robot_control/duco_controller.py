@@ -185,9 +185,9 @@ class DucoController:
 
     def movej(self, target_joints_deg, vel_deg=20.0, acc_deg=30.0, block=True):
         """Move joints directly using movej. Safety clamped speed."""
-        # Safety velocity clamping: max 50 deg/s for agile test motion
-        v_clamped = min(float(vel_deg), 50.0)
-        a_clamped = min(float(acc_deg), 80.0)
+        # Velocity clamping: max 180 deg/s for high-speed industrial cobot motion
+        v_clamped = min(float(vel_deg), 180.0)
+        a_clamped = min(float(acc_deg), 360.0)
         v_rad = math.radians(v_clamped)
         a_rad = math.radians(a_clamped)
 
@@ -202,8 +202,8 @@ class DucoController:
 
     def movel(self, target_tcp_mm_deg, vel_m_s=0.06, acc_m_s2=0.10, block=True):
         """Move linear in Cartesian space using movel. Safety clamped speed."""
-        v_clamped = min(float(vel_m_s), 0.16) # max 160 mm/s
-        a_clamped = min(float(acc_m_s2), 0.30)
+        v_clamped = min(float(vel_m_s), 1.20) # max 1200 mm/s
+        a_clamped = min(float(acc_m_s2), 3.50)
 
         p_in = (ctypes.c_double * 6)()
         p_in[0] = target_tcp_mm_deg[0] / 1000.0
@@ -220,8 +220,8 @@ class DucoController:
 
     def tcp_move(self, offset_mm_deg, vel_m_s=0.06, acc_m_s2=0.10, block=True):
         """Move relative in Tool frame [dx_mm, dy_mm, dz_mm, drx_deg, dry_deg, drz_deg]."""
-        v_clamped = min(float(vel_m_s), 0.16)
-        a_clamped = min(float(acc_m_s2), 0.30)
+        v_clamped = min(float(vel_m_s), 1.20)
+        a_clamped = min(float(acc_m_s2), 3.50)
         off_in = (ctypes.c_double * 6)()
         off_in[0] = offset_mm_deg[0] / 1000.0
         off_in[1] = offset_mm_deg[1] / 1000.0
