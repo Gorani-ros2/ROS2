@@ -6,6 +6,17 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 
 ## 📢 최근 핵심 업데이트 내역 (Latest Updates)
 
+### 📌 2026-09-29: 로봇 카메라 실시간 영상 스트리밍 지연 진단 및 WebRTC 기본 프로토콜 채택
+- **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Claude Code)
+- **핵심 수행 작업**:
+  1. **RTSP/HLS/WebRTC 구간별 지연 실측**: 카메라 캡처(~26ms), 네트워크 RTT(~10ms), RTSP 단발 지연(82ms), HLS(3.35초, 배제), WebRTC(최저)로 병목이 코덱/네트워크가 아니라 전송 프로토콜·클라이언트 버퍼링임을 규명.
+  2. **중계서버 MediaMTX v1.11.3 → v1.21.1 업그레이드**: 1년 7개월 미갱신 상태에서 발생하던 WebRTC 코덱 payload type 충돌 버그(`bluenviron/mediamtx#4394`) 해결.
+  3. **낮은 fps(10fps)가 재생 클라이언트 버퍼링을 시간 단위로 증폭시키는 현상 확인**: 30fps 전환으로 동일 측정 기준 지연 ~220ms → ~83ms 개선.
+  4. **관제(언리얼) 영상 수신 기본 프로토콜을 WebRTC로 확정**, RTSP는 백업/범용 테스트용으로 유지.
+- **관련 문서**:
+  * [`software/protocol/robot-camera-webrtc-streaming.md`](software/protocol/robot-camera-webrtc-streaming.md) — 프로토콜 비교, 트러블슈팅 Q&A
+  * [`synology-server-roadmap/video_streaming_latency_investigation.md`](https://github.com/Gorani-ros2/synology-server-roadmap/blob/main/video_streaming_latency_investigation.md) — 전체 실측 진단 스토리라인 (별도 레포)
+
 ### 📌 2026-08-21: Insta360 대용량 추출 멈춤(Freeze) 및 Ctrl+C 데드락 원인 규명, CLI 스크립트(`sync_record.py`) 예외 처리 및 문서화
 - **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
 - **핵심 수행 작업**:
