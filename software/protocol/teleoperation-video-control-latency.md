@@ -6,6 +6,13 @@
 
 - 구분 표기: **[실측]** 직접 테스트·측정, **[공식]** 1차 공식 자료(논문·제조사 문서·보도자료), **[추정]** 일반 공학 지식·추론(검증 필요)
 
+> **관련 구체 사례**: 이 문서는 일반화된 조사·설계 패턴을 다룬다. 실제 카메라(OAK RGB) →
+> ffmpeg → MediaMTX → 언리얼 관제 뷰어 파이프라인에서 §2.2의 원인들이 실제로 어떻게
+> 나타났는지(RTSP 82ms/HLS 3.35초/WebRTC 최저 실측치, MediaMTX 구버전 WebRTC 코덱 충돌
+> 버그 발견·수정 과정)는 [`robot-camera-webrtc-streaming.md`](robot-camera-webrtc-streaming.md)와
+> [`synology-server-roadmap/video_streaming_latency_investigation.md`](https://github.com/Gorani-ros2/synology-server-roadmap/blob/main/video_streaming_latency_investigation.md)(별도 레포)
+> 참고.
+
 ---
 
 ## 📌 Executive Abstract

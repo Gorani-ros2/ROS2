@@ -1,0 +1,8 @@
+/ouster/os_driver:
+  ros__parameters:
+    sensor_hostname: "169.254.129.201"
+    lidar_mode: "2048x10"
+    viz: false
+    timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"
+    multipurpose_io_mode: "INPUT_NTP"
+    sync_pulse_in_polarity: "ACTIVE_HIGH"

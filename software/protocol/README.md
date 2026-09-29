@@ -14,7 +14,11 @@
 - [`teleoperation-video-control-latency.md`](teleoperation-video-control-latency.md) —
   원격 영상(RTSP/HLS/WebRTC)·제어(MQTT/ROS2 DDS) 실시간성. 지연 예산 분해, MQTT의 구조적
   비실시간성과 보완 설계 패턴, 무선 WAN에서의 NAT 통과·VPN 영향, 원격 건설기계·ETH HEAP
-  논문 벤치마크.
+  논문 벤치마크. 일반화된 조사·설계 문서 — 실제 실측 사례는 아래 문서 참고.
+- [`robot-camera-webrtc-streaming.md`](robot-camera-webrtc-streaming.md) — 실제 카메라
+  파이프라인(OAK RGB → ffmpeg → MediaMTX → 언리얼)에서 RTSP/HLS/WebRTC 구간별 지연을
+  실측하고 WebRTC를 기본 프로토콜로 채택한 기록. MediaMTX 구버전 WebRTC 코덱 충돌 버그
+  발견·수정 포함.
 
 ## 관련 하드웨어
 
