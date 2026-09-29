@@ -27,6 +27,7 @@ RUT241은 로봇 온보드 환경에서 자급제 데이터 기기로 동작하�
 * 📡 **체결 수신기/센서**: [`Septentrio RTK 수신기`](../gps_rtk/septentrio-mosaic-go-g5-p3h.md)
 * 📹 **관련 비전/라이다 센서**: [`Ouster OS0-128 라이다`](../../vision_sensors/lidar/ouster-os0-128.md), [`Insta360 360도 카메라`](../../vision_sensors/camera/insta360-camera-sdk.md)
 * 🌐 **RTK MQTT DB 연동 브릿지**: [`rtk-mqtt-db-bridge.md`](../../../software/protocol/rtk-mqtt-db-bridge.md)
+* 🌐 **원격 텔레오퍼레이션 영상·제어 실시간성(VPN 오버헤드·NAT 통과 상세)**: [`teleoperation-video-control-latency.md`](../../../software/protocol/teleoperation-video-control-latency.md)
 * ⏱️ **하드웨어 PPS 동기화 및 Bag 검증**: [`lidar-rtk-pps-sync-bag.md`](../../../software/sensorfusion/lidar-rtk-pps-sync-bag.md)
 * 💻 **관련 센서 융합 모듈**: [`라이다-카메라 동시 녹화 아키텍처`](../../../software/sensorfusion/lidar-insta360-sync-record.md)
 * 📡 **관련 ROS 2 파서 노드**: [`Septentrio NMEA Fix 노드`](../../../software/ros2_basics/septentrio_nmea_fix_node.py)
@@ -78,6 +79,7 @@ RUT241은 로봇 온보드 환경에서 자급제 데이터 기기로 동작하�
    - RUT241 LAN 포트를 온보드 스위치 hub에 연결하고, Ouster OS0-128 라이다, Insta360 제어 PC, Septentrio RTK GNSS 수신기를 동일 서브넷(`192.168.1.x`)으로 묶습니다.
 2. **WireGuard / OpenVPN 관제 릴레이**:
    - RUT241 RutOS 내부에 WireGuard/OpenVPN 클라이언트를 탑재하여 관제실 전용 암호화 터널을 구축하고, ROS 2 `CycloneDDS` / `FastDDS` Discovery Server 또는 `zenoh-bridge-ros2`를 통해 멀티 로봇 관제 토픽을 전송합니다.
+   - VPN 터널 처리량이 영상 비트레이트보다 낮으면 대기열이 쌓이며 실시간성이 크게 저하됩니다(OpenVPN은 UDP 모드 권장, TCP 모드는 지양) — 처리량 실측·MTU 조각화 등 상세는 [`teleoperation-video-control-latency.md` §5](../../../software/protocol/teleoperation-video-control-latency.md#5-무선-wan에서의-nat-통과와-vpn-실시간성-영향) 참고.
 
 ---
 

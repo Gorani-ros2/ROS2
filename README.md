@@ -6,6 +6,22 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 
 ## 📢 최근 핵심 업데이트 내역 (Latest Updates)
 
+### 📌 2026-09-29: 원격 텔레오퍼레이션 영상·제어 실시간성 레퍼런스 추가
+- **작업 수행 개발 장비**: `knu desktop` (AI: Claude Code)
+- 카메라→인코딩→네트워크→서버→관제 파이프라인의 glass-to-glass 지연 예산 분해, RTSP/HLS
+  vs WebRTC 버퍼링 구조 차이와 "RTSP 2초 지연"의 흔한 원인(클라이언트 기본 버퍼값) 정리.
+- MQTT가 실시간성을 사양으로 보장하지 않는 구조적 이유(head-of-line blocking, QoS 왕복,
+  꼬리 지연)와, 로봇 제어 채널에서 이를 흡수하는 설계 패턴(연속/단발 명령 분리, 워치독,
+  시퀀스 번호, twist_mux/Nav2 액션 브리지) 정리.
+- 무선 WAN(LTE 등)에서 CGNAT를 통과하는 프로토콜별 방식 비교(MQTT/WebRTC/ROS2 DDS/Zenoh),
+  VPN(WireGuard/OpenVPN) 도입이 영상 실시간성에 미치는 영향과 실패 조건(터널 처리량 부족,
+  TCP-over-TCP, MTU 조각화) 정리.
+- 원격 건설기계 실증 연표·제어 방식 3분류, ETH Zurich HEAP 논문의 "100ms 영상 지연" 재현성
+  검토(논문만으로는 재현 불가, XIMEA 공개 파이프라인으로 보강) 포함.
+- **관련 문서**:
+  * [`software/protocol/teleoperation-video-control-latency.md`](software/protocol/teleoperation-video-control-latency.md) — 원격 영상·제어 실시간성 종합 레퍼런스
+  * [`hardware/support_sensors/router/teltonika-rut241.md`](hardware/support_sensors/router/teltonika-rut241.md) — VPN 오버헤드·원격 관제 구성 절 갱신
+
 ### 📌 2026-08-24: 산업용 PoE/RTSP 카메라 폼팩터 비교 및 IP67~68급 자작 하우징 설계 가이드 추가
 - **작업 수행 개발 장비**: `knu desktop` (AI: Claude Code)
 - 완제품형(Bullet/Dome/Block)·분리형(Remote Head)·보드/박스카메라형 세 폼팩터의 대표 제품
