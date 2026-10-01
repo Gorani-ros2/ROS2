@@ -96,7 +96,7 @@ class RTKMQTTBridgeNode(Node):
         super().__init__('rtk_mqtt_db_bridge')
         
         # ROS 2 Parameters
-        self.declare_parameter('mqtt_broker_ip', '<SERVER_IP>')  # Main Control Center Public IP
+        self.declare_parameter('mqtt_broker_ip', '<SERVER_IP>')  # 관제 서버 공인 IP (실행 시 -p mqtt_broker_ip:=... 로 지정)
         self.declare_parameter('mqtt_broker_port', 1883)
         self.declare_parameter('mqtt_topic', 'robot/sensor/rtk')
         self.declare_parameter('robot_id', 'robot_andong_01')

@@ -5,7 +5,7 @@ Location: /home/knu/workspaces/insta360/software/ros2_basics/septentrio_ngii_ntr
 
 Subscribes: None (Receives RTCM3 from NGII Caster, writes to Septentrio USB serial)
 Publishes: /navsat/fix (sensor_msgs/msg/NavSatFix), /navsat/vel (geometry_msgs/msg/TwistStamped)
-NTRIP Caster: rts1.ngii.go.kr:2101, Mountpoint: VRS-RTCM34, User: <NGII_ID>, Pass: <NGII_PASSWORD>
+NTRIP Caster: rts1.ngii.go.kr:2101, Mountpoint: VRS-RTCM34, User/Pass: --ros-args -p username:=<NGII_ID> -p password:=<NGII_PASSWORD> (not hardcoded)
 """
 
 import rclpy

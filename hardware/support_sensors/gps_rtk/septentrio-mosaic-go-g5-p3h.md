@@ -236,7 +236,7 @@ position_covariance_type: 3
   * **주소 (Caster / Host)**: **`rts1.ngii.go.kr`** (VRS 최신 주소 / FKP 사용 시 `rts2.ngii.go.kr`, 또는 IP `211.175.76.10`)
   * **포트 (Port)**: **`2101`**
   * **마운트포인트 (Mountpoint)**: **`VRS-RTCM32`** (권장: GPS+GLONASS+BeiDou+Galileo 4개 위성군) 또는 `VRS-RTCM30`
-  * **ID / Password**: GNSS 포털 발급 아이디 / **`<NGII_PASSWORD>`** (RTK 서비스 전용 공통 비밀번호)
+  * **ID / Password**: GNSS 포털 발급 아이디 / 포털에서 안내하는 RTK 서비스 비밀번호 (`<NGII_PASSWORD>`, 문서·코드에 적지 않음)
 
 ---
 

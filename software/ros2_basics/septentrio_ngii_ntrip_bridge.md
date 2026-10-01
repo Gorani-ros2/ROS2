@@ -43,7 +43,7 @@ source /opt/ros/humble/setup.bash && python3 ~/workspaces/insta360/software/ros2
 ```
 
 > [!TIP]
-> 국토지리정보원 서비스 기본 아이디 `<NGII_ID>` 및 마운트포인트 `VRS-RTCM34`가 코드 내에 기본값으로 탑재되어 있으므로 추가 파라미터 없이 1줄로 즉시 가동됩니다. 타 계정 사용 시 `--ros-args -p username:=<아이디>` 파라미터를 추가하십시오.
+> 계정 정보는 코드에 넣지 않는다. 실행 시 `--ros-args -p username:=<NGII_ID> -p password:=<NGII_PASSWORD>`로 전달하십시오(마운트포인트 기본값 `VRS-RTCM34`).
 
 ### 4.3 정상 출력 검증 예시 (Expected Topic Output)
 

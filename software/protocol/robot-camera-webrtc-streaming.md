@@ -28,7 +28,7 @@ flowchart LR
         CAM -->|raw NV12, USB| ENC
     end
 
-    subgraph Server ["중계 서버 (<SERVER_IP>)"]
+    subgraph Server ["중계 서버 (<서버_공인_IP>)"]
         MTX["MediaMTX\n(RTSP publish 수신)"]
     end
 
