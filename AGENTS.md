@@ -2,7 +2,7 @@
 
 Welcome AI Agent! You are working on the **ROS 2 & Multi-Sensor System Knowledge Base** repository (`Gorani-ros2/ROS2`).
 
-This repository is a **PUBLIC GitHub repository** and serves as the **Central Core Technology Hub** for all application projects (Andong Robot, Phenotyping, Papers/Thesis).
+This repository is a **PUBLIC GitHub repository** and serves as the **Central Core Technology Hub** shared by multiple application projects. Do not write project names or project-specific application cases in this public repository.
 
 ---
 
@@ -16,7 +16,7 @@ When assisting the user or making edits to this repository, you MUST strictly ad
 
 ### 2. 🌐 Central Knowledge Hub & Cross-Repository Synchronization Rule
 - Treat this repository as the **primary reusable technology vault**.
-- When working on application repositories (Andong Robot, Phenotyping, Research Papers), any verified sensor driver, parsing node, hardware pinout, or sync script MUST be uploaded back into this ROS 2 repository following standard templates for long-term reusability.
+- When working on application repositories, any verified sensor driver, parsing node, hardware pinout, or sync script MUST be uploaded back into this ROS 2 repository following standard templates for long-term reusability.
 - Conversely, when building application projects, pull drivers and setup guides directly from this ROS 2 knowledge base.
 
 ### 3. 🔗 Mandatory Bidirectional Cross-Linking Rule

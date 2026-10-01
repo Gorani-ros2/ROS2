@@ -6,6 +6,19 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
 
 ## 📢 최근 핵심 업데이트 내역 (Latest Updates)
 
+### 📌 2026-10-01: 폴더 구조 정리 및 공개 레포 원칙 정비
+- **작업 수행 개발 장비**: `knu desktop` (AI: Claude Code)
+- **핵심 수행 작업**:
+  1. **루트에 흩어져 있던 실행 파일 정리**: `run.sh`, `sync_record.py`, `my_ouster_params.yaml` →
+     [`software/sensorfusion/insta360_sync/`](software/sensorfusion/insta360_sync/). `run.sh`는 레포 최상위
+     `build/`를 스스로 찾고, `sync_record.py`는 같은 폴더의 `run.sh`를 절대 경로로 부르도록 고쳐 어느 폴더에서
+     실행해도 동작한다. 관련 문서의 경로 표기 갱신.
+  2. **구조에 없던 `docs/` 폴더 해체**: 로봇팔 비전 서보잉 문서 → [`software/robot_control/`](software/robot_control/README.md)
+     (README 신설), 나사 검출 제로샷 튜닝 기록·사진 → [`software/sensorfusion/screw_vision/`](software/sensorfusion/screw_vision/README.md).
+  3. **공개 레포 원칙 정비**: 문서·규칙 파일에 남아 있던 개별 프로젝트명·적용 사례 표현을 순수 기술 표현으로 교체.
+- **인수인계**: 이 레포를 작업 폴더로 쓰는 PC는 `git pull` 후 Insta360·라이다 녹화 명령을
+  `software/sensorfusion/insta360_sync/`에서 실행한다(빌드 산출물 `build/`는 레포 최상위에 그대로 둔다).
+
 ### 📌 2026-09-29: 로봇 카메라 실시간 영상 스트리밍 지연 진단 및 WebRTC 기본 프로토콜 채택
 - **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Claude Code)
 - **핵심 수행 작업**:
@@ -59,13 +72,13 @@ ROS2 및 센서 융합 시스템 관련 기술을 체계적으로 정리하는 �
   * [`hardware/vision_sensors/camera/insta360-camera-sdk.md`](hardware/vision_sensors/camera/insta360-camera-sdk.md) — Insta360 SDK 소켓 버퍼 락 Q&A
   * [`tracking/2026-08-21-environment-audit.md`](tracking/2026-08-21-environment-audit.md) — 2026-08-21 개발 환경 및 Audit 이력 리포트
 
-### 📌 2026-08-18: RTK+라우터 NGII 보정, MQTT-DB 서버 연동, 라이다-RTK PPS 동기화 및 ROS2 Bag 유지 검증 (디지털 트윈)
+### 📌 2026-08-18: RTK+라우터 NGII 보정, MQTT-DB 서버 연동, 라이다-RTK PPS 동기화 및 ROS2 Bag 유지 검증
 - **작업 수행 개발 장비**: `knu laptop` (KNU 노트북 PC / AI: Antigravity)
 - **핵심 수행 작업 4종**:
   1. **RTK+RUT241 라라우터 국토지리정보원(NGII) NTRIP 연동**: `rts1.ngii.go.kr:2101` (`VRS-RTCM34`, 계정 `<NGII_ID>`) 보정 데이터 수신 및 `sdio, USB1, auto, RTCMv3` 시리얼 주입을 통한 `status.status: 2` (RTK Fixed, 1cm 정밀도) 실시간 융합 승격 실증 및 통합 노드([`septentrio_ngii_ntrip_bridge.py`](software/ros2_basics/septentrio_ngii_ntrip_bridge.py)) 구동 검증.
   2. **RTK 텔레메트리 MQTT 방식 서버 DB 적재**: ROS 2 `/navsat/fix` 데이터를 JSON 페이로드 규격으로 MQTT 브로커(QoS 1) 발행 및 PostgreSQL / TimescaleDB 공간 테이블 스키마 자동 적재 파이프라인 정립.
   3. **라이다(Ouster OS0-128) & RTK(Septentrio) PPS 하드웨어 동기화**: Septentrio `PPS Out` <-> Ouster `SYNC_PULSE_IN` 물리 결선 및 `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"` 세팅.
-  4. **ROS 2 Bag 녹화 및 PPS 동기화 유지 검증**: rosbag 저장 load 환경에서도 라이다-RTK 타임스탬프 드리프트 방지 및 검증 스크립트 작성 (디지털 트윈 3D 라이다+360 RGB 매핑 핵심 기술).
+  4. **ROS 2 Bag 녹화 및 PPS 동기화 유지 검증**: rosbag 저장 load 환경에서도 라이다-RTK 타임스탬프 드리프트 방지 및 검증 스크립트 작성 (3D 라이다+360 RGB 매핑 핵심 기술).
 - **관련 문서**:
   * [`software/ros2_basics/septentrio_ngii_ntrip_bridge.md`](software/ros2_basics/septentrio_ngii_ntrip_bridge.md) — Septentrio NGII NTRIP RTK 통합 드라이버 파이프라인
   * [`software/protocol/rtk-mqtt-db-bridge.md`](software/protocol/rtk-mqtt-db-bridge.md) — RTK Telemetry MQTT 서버 DB 연동 파이프라인

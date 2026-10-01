@@ -24,6 +24,8 @@ Insta360 카메라(X3, X4 등)는 Dual Fisheye 렌즈 기반의 360도 전방위
 
 Insta360 카메라는 C++ Camera SDK 기반의 실행 바이너리 및 CLI 래퍼 스크립트(`./run.sh` 또는 `sync_record.py`)를 통해 통신하고 제어합니다.
 
+> 📁 **스크립트 위치**: `run.sh`, `sync_record.py`, `my_ouster_params.yaml`은 [`software/sensorfusion/insta360_sync/`](../../../software/sensorfusion/insta360_sync/)에 있다. 아래 명령은 그 폴더에서 실행한다(`cd software/sensorfusion/insta360_sync`). Insta360 제어 바이너리는 레포 최상위 `build/`에 빌드되어 있으며 `run.sh`가 위치를 찾아 실행한다.
+
 ### 1. 카메라 해상도 및 프레임레이트 설정
 ```bash
 ./run.sh --set-res <RESOLUTION> <FPS>

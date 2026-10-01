@@ -10,6 +10,8 @@
 ## 📌 Executive Abstract (상세 요약 및 초록)
 본 문서는 Ouster OS0-128 3D 라이다, Insta360 360도 카메라, Septentrio RTK 수신기 멀티 센서 융합 시스템의 동시 제어 아키텍처, 파이썬 동기화 녹화 스크립트(`sync_record.py`), ROS 2 오프셋 동기화 및 다중 센서 고온 발열 방지 수칙을 다룹니다.
 
+> 📁 **스크립트 위치**: `run.sh`, `sync_record.py`, `my_ouster_params.yaml`은 [`software/sensorfusion/insta360_sync/`](insta360_sync/)에 있다. 아래 명령은 그 폴더에서 실행한다(`cd software/sensorfusion/insta360_sync`). Insta360 제어 바이너리는 레포 최상위 `build/`에 빌드되어 있으며 `run.sh`가 위치를 찾아 실행한다.
+
 ---
 
 ## 1. 개요 및 정의

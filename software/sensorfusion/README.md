@@ -6,6 +6,8 @@
 
 ## 문서 목록
 
+- [`insta360_sync/`](insta360_sync/) — 위 문서의 실행 스크립트(`sync_record.py`, `run.sh`)와 라이다 드라이버 설정(`my_ouster_params.yaml`)
+- [`screw_vision/`](screw_vision/README.md) — D405 기반 나사 검출(제로샷 튜닝 기록 `d405_zero_shot_tuning_history.md` 포함)
 - [라이다 & Insta360 동시 제어 및 시간 동기화](lidar-insta360-sync-record.md) — Ouster OS0-128과 Insta360 360도 카메라의 통합 시분할/연속 녹화, ROS 2 시간 동기화 오프셋 산출, PCAP 수집 및 과열 보호 통합 관리 기술
 
 ## 관련 하드웨어

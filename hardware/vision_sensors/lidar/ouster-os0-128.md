@@ -20,7 +20,7 @@ Ouster OS0-128은 128채널의 초광각(Super-Wide FOV) 3D 라이다 센서로,
 ---
 
 ## 3. 통신 및 ROS 2 토픽 정의
-- **드라이버 설정**: `my_ouster_params.yaml` (`lidar_mode: "2048x10"`, `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"`)
+- **드라이버 설정**: `software/sensorfusion/insta360_sync/my_ouster_params.yaml` (`lidar_mode: "2048x10"`, `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"`)
 - **발행 토픽**:
   - `/ouster/points` (`sensor_msgs/msg/PointCloud2`, QoS: **`Best Effort`**)
   - `/ouster/imu` (`sensor_msgs/msg/Imu`)
@@ -34,7 +34,7 @@ source /opt/ros/humble/setup.bash
 source ~/workspaces/insta360/ouster_ros2/install/setup.bash
 
 # Ouster 드라이버 런칭 (my_ouster_params.yaml 설정 적용)
-ros2 launch ouster_ros driver.launch.py params_file:=my_ouster_params.yaml viz:=False
+ros2 launch ouster_ros driver.launch.py params_file:=software/sensorfusion/insta360_sync/my_ouster_params.yaml viz:=False
 ```
 
 ### 2. 센서 메타데이터 JSON 쿼리 및 저장

@@ -11,7 +11,7 @@
 
 본 문서는 **Ouster OS0-128 3D 라이다**와 **Septentrio mosaic-go G5 RTK GNSS 수신기** 간의 **하드웨어 PPS (Pulse Per Second) 시계 동기화** 세팅 및 **ROS 2 Bag 실전 녹화/검증** 절차를 수록한 기술 명세서입니다.
 
-디지털 트윈(Digital Twin)용 고정밀 3D 라이다 점군 데이터와 360도 RGB 파노라마 영상 매핑, 자율주행 쓰레기로봇(안동 쓰봇) 위치 추정 시, 호스트 PC 소프트웨어 시계의 드리프트(Drift) 및 시스템 시스템 지연 오차를 근본적으로 차단하기 위하여 RTK 수신기의 위성 UTC 마이크로초(µs) 정밀도 PPS 펄스를 Ouster 라이다의 동기화 신호 입력(`SYNC_PULSE_IN`)에 물리 결선합니다.
+고정밀 3D 라이다 점군 데이터와 360도 RGB 파노라마 영상 매핑, 자율주행 로봇 위치 추정 시, 호스트 PC 소프트웨어 시계의 드리프트(Drift) 및 시스템 시스템 지연 오차를 근본적으로 차단하기 위하여 RTK 수신기의 위성 UTC 마이크로초(µs) 정밀도 PPS 펄스를 Ouster 라이다의 동기화 신호 입력(`SYNC_PULSE_IN`)에 물리 결선합니다.
 
 또한 `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"` 적용 상태에서 rosbag 녹화를 수행하고, 데이터 수집 중 PPS 동기화 설정이 끊김 없이 안정적으로 유지되는지 정밀 검증하는 스크립트 및 Q&A를 포함합니다.
 
@@ -70,7 +70,7 @@ flowchart TD
   * `PPS Out` (Pin 7) ➔ **Ouster Interface Box `SYNC_PULSE_IN` (+)** (JST-SH 짝맞춤 핀)
   * `GND` (Pin 10) ➔ **Ouster Interface Box `GND` (-)**
 
-### ⚙️ 2. Ouster LiDAR 파라미터 설정 (`my_ouster_params.yaml`)
+### ⚙️ 2. Ouster LiDAR 파라미터 설정 (`software/sensorfusion/insta360_sync/my_ouster_params.yaml`)
 
 ```yaml
 ouster_driver:
@@ -95,12 +95,12 @@ source /opt/ros/humble/setup.bash
 source ~/workspaces/insta360/ouster_ros2/install/setup.bash
 
 # 2. PPS 적용 Ouster 드라이버 런칭
-ros2 launch ouster_ros driver.launch.py params_file:=my_ouster_params.yaml viz:=False &
+ros2 launch ouster_ros driver.launch.py params_file:=software/sensorfusion/insta360_sync/my_ouster_params.yaml viz:=False &
 
 # 3. Septentrio RTK 수신기 NMEA/Fix 노드 런칭
 python3 software/ros2_basics/septentrio_nmea_fix_node.py &
 
-# 4. PPS 동기화 정밀 rosbag 녹화 실행 (디지털 트윈 매핑 파이프라인 필수 토픽)
+# 4. PPS 동기화 정밀 rosbag 녹화 실행 (3D 매핑 파이프라인 필수 토픽)
 ros2 bag record /ouster/points /ouster/imu /navsat/fix /navsat/vel /tf_static -o digital_twin_pps_bag_$(date +%Y%m%d_%H%M%S)
 ```
 
@@ -184,5 +184,5 @@ if __name__ == "__main__":
 
 1. **라이다-수신기 써멀 릴레이**:
    * Ouster OS0-128 라이다 내부 온도가 60°C 초과 시 `Shot Limiting` (점군 결측) 현상이 일어날 수 있으므로, rosbag 녹화 시 `curl -s http://169.254.129.201/api/v1/sensor/telemetry`로 온도를 5분 주기로 감시.
-2. **디지털 트윈 & 안동 쓰봇 모듈 전파**:
-   * 본 PPS 및 rosbag 검증 프로세스는 디지털 트윈 레포지토리 우선 정리 후, 검증 마감 시 안동 쓰레기로봇 및 ROS 공통 레포지토리에 모듈화하여 이식함.
+2. **모듈 재사용**:
+   * 본 PPS 및 rosbag 검증 프로세스는 같은 센서 구성을 쓰는 다른 로봇에도 모듈 단위로 그대로 이식해 쓴다.

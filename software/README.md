@@ -7,5 +7,6 @@
 - [`autonomy/`](autonomy/README.md) — SLAM·경로계획·VLM거시판단+라이다미시제어 등
   자율주행 로직
 - [`app_model/`](app_model/README.md) — 설치 프로그램, VLA/LLM/VLM 스펙·사용법
+- [`robot_control/`](robot_control/README.md) — 로봇팔 구동·비전 유도 제어 코드
 - [`ros2_basics/`](ros2_basics/README.md) — 패키지 생성/빌드/워크스페이스, 통신구조 등
   ROS2 자체 기초

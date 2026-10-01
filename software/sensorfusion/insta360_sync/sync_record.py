@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 import os
+
+import shlex
+
+# run.sh는 이 스크립트와 같은 폴더에 있다. 어느 폴더에서 실행해도 찾도록 절대 경로로 부른다
+RUN_SH = shlex.quote(os.path.join(os.path.dirname(os.path.abspath(__file__)), "run.sh"))
 import re
 import sys
 import time
@@ -310,7 +315,7 @@ def main():
     if args.record or args.record_time:
         print(f"Target Camera Config: {args.res} @ {args.fps}fps")
         print("[Camera] Configuring resolution...")
-        cam_config_cmd = f"./run.sh --set-res {args.res} {args.fps}"
+        cam_config_cmd = f"{RUN_SH} --set-res {args.res} {args.fps}"
         if not run_cmd(cam_config_cmd):
             print("[Error] Failed to configure camera resolution. Exiting.")
             sys.exit(1)
@@ -335,7 +340,7 @@ def main():
         # === RECORDING / RECORD-TIME MODE ===
         # 1. Start Camera Recording
         print("[Camera] Starting recording...")
-        cam_start_cmd = "./run.sh --start-only"
+        cam_start_cmd = f"{RUN_SH} --start-only"
         if not run_cmd(cam_start_cmd):
             print("[Error] Failed to start camera recording. Exiting.")
             stop_process(ouster_proc)
@@ -356,7 +361,7 @@ def main():
             time.sleep(1.0)
             if throttle_proc.poll() is not None:
                 print("[Error] Throttle node exited immediately. Aborting.")
-                run_cmd("./run.sh --stop")
+                run_cmd(f"{RUN_SH} --stop")
                 stop_process(ouster_proc)
                 sys.exit(1)
 
@@ -421,7 +426,7 @@ def main():
                 print("[PCAP] [Error] Sudo validation failed. Cannot record PCAP.")
                 stop_process(bag_proc)
                 stop_process(ouster_proc)
-                run_cmd("./run.sh --stop")
+                run_cmd(f"{RUN_SH} --stop")
                 sys.exit(1)
             
             stop_sudo_thread = threading.Event()
@@ -482,7 +487,7 @@ def main():
                 stop_process(throttle_proc)
             
             print("[Camera] Requesting recording stop...")
-            success, stdout, stderr = run_cmd("./run.sh --stop", get_output=True)
+            success, stdout, stderr = run_cmd(f"{RUN_SH} --stop", get_output=True)
             if not success:
                 print("[Error] Failed to stop camera cleanly.")
                 stop_process(ouster_proc)
@@ -503,7 +508,7 @@ def main():
                         filename = os.path.basename(url)
                         local_dest = os.path.join(save_dir, filename)
                         print(f"[Download] Fetching camera file: {filename} (Press Ctrl+C to cancel download if frozen)")
-                        download_cmd = f"./run.sh --download {url} {local_dest}"
+                        download_cmd = f"{RUN_SH} --download {url} {local_dest}"
                         run_cmd(download_cmd)
                 except KeyboardInterrupt:
                     print("\n[Download] [Warn] Download interrupted by user (Ctrl+C). Camera file remains on camera SD card.")
@@ -515,7 +520,7 @@ def main():
         print("--------------------------------------------------\n")
         
         print("[Camera] Capturing photo...")
-        success, stdout, stderr = run_cmd("./run.sh --take-photo", get_output=True)
+        success, stdout, stderr = run_cmd(f"{RUN_SH} --take-photo", get_output=True)
         if not success:
             print("[Error] Failed to capture camera photo.")
             stop_process(ouster_proc)
@@ -535,7 +540,7 @@ def main():
                 filename = os.path.basename(url)
                 local_dest = os.path.join(save_dir, filename)
                 print(f"[Download] Fetching camera photo: {filename}")
-                download_cmd = f"./run.sh --download {url} {local_dest}"
+                download_cmd = f"{RUN_SH} --download {url} {local_dest}"
                 run_cmd(download_cmd)
 
     print("[LiDAR] Shutting down driver node...")

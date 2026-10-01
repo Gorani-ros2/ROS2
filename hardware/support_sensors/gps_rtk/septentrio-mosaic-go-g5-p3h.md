@@ -155,7 +155,7 @@ Septentrio mosaic-go G5는 mosaic-G5 P3™ (단일 안테나 초고정밀 RTK) �
 * **물리 결선 방법**:
   * Septentrio 10-pin 헤더 **`PPS` 핀** ➔ Ouster Interface Box **`SYNC_PULSE_IN` (+)**
   * Septentrio 10-pin 헤더 **`GND` 핀** ➔ Ouster Interface Box **`GND` (-)**
-* **라이다 설정**: `my_ouster_params.yaml`에 `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"` 적용.
+* **라이다 설정**: `software/sensorfusion/insta360_sync/my_ouster_params.yaml`에 `timestamp_mode: "TIME_FROM_SYNC_PULSE_IN"` 적용.
 
 ---
 
